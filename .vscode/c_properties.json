@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "name": "OSDev",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/kernel/limine-protocol/include",
+                "${workspaceFolder}/kernel/freestnd-c-hdrs/include",
+                "${workspaceFolder}/kernel/libc/include",
+                "${workspaceFolder}/kernel/src"
+            ],
+            "defines": [],
+            "compilerPath": "/usr/bin/x86_64-elf-gcc",
+            "compilerArgs": [
+                "-nostdinc",
+                "-ffreestanding",
+                "-fno-stack-protector"
+            ],
+            "cStandard": "c11",
+            "intelliSenseMode": "linux-gcc-x64"
+        }
+    ],
+    "version": 4
+}

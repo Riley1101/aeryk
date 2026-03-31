@@ -1,0 +1,5 @@
+/limine
+/edk2-ovmf
+*.iso
+*.hdd
+.cache
