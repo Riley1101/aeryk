@@ -5,7 +5,7 @@
 ARCH := x86_64
 
 # Default user QEMU flags. These are appended to the QEMU command calls.
-QEMUFLAGS := -m 2G
+QEMUFLAGS := -m 2G -d guest_errors,int -D qemu.log
 
 override IMAGE_NAME := template-$(ARCH)
 
@@ -161,6 +161,7 @@ kernel: kernel/.deps-obtained
 $(IMAGE_NAME).iso: limine/limine kernel
 	rm -rf iso_root
 	mkdir -p iso_root/boot
+	cp -v external/* iso_root/boot/
 	cp -v kernel/bin-$(ARCH)/kernel iso_root/boot/
 	mkdir -p iso_root/boot/limine
 	cp -v ./boot/limine.conf iso_root/boot/limine/

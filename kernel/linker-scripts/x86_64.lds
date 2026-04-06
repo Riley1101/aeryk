@@ -37,6 +37,10 @@ SECTIONS
   /* Move to next memory page*/
   . = ALIGN(CONSTANT(MAXPAGESIZE));
 
+  .rodata : {
+    *(.rodata .rodata.*)
+  } :rodata
+
   .note.gnu.build-id : {
       *(.note.gnu.build-id)
   } :rodata
@@ -52,7 +56,7 @@ SECTIONS
   .bss : {
     *(.bss .bss.*)
     *(COMMON)
-  } :bss
+  } :data
 
   /DISCARD/ : {
     *(.eh_frame*)
