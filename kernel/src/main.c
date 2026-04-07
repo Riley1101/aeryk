@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <tty.h>
 #include <font.h>
+#include <gdt.h>
 
 // Set base version to 6
 __attribute__((used, section(".limine_requests"))) static volatile uint64_t
@@ -43,6 +44,7 @@ static void hcf(void)
 
 void kmain(void)
 {
+    initGdt();
 
     // bootloader to understand our version
     if (LIMINE_BASE_REVISION_SUPPORTED(limine_base_revision) == false)
@@ -75,10 +77,22 @@ void kmain(void)
     struct PSF1_FONT psf_font;
     struct PSF1_FONT *psf = &psf_font;
 
-    loadPSF1("zap-light16.psf", psf, (struct limine_module_response *)module_request.response);
+    loadPSF1("cp850-8x16.psf", psf, (struct limine_module_response *)module_request.response);
 
     init_renderer(global_renderer, &f, psf);
 
+    print(global_renderer, "Hello, Kernel!\n");
+    print(global_renderer, "Hello, Kernel!\n");
+    print(global_renderer, "Hello, Kernel!\n");
+    print(global_renderer, "Hello, Kernel!\n");
+    print(global_renderer, "Hello, Kernel!\n");
+    print(global_renderer, "Hello, Kernel!\n");
+    print(global_renderer, "Hello, Kernel!\n");
+    print(global_renderer, "Hello, Kernel!\n");
+    print(global_renderer, "Hello, Kernel!\n");
+    print(global_renderer, "Hello, Kernel!\n");
+    print(global_renderer, "Hello, Kernel!\n");
+    print(global_renderer, "Hello, Kernel!\n");
     print(global_renderer, "Hello, Kernel!\n");
 
     hcf();
