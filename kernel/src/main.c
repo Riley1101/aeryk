@@ -6,6 +6,7 @@
 #include <tty.h>
 #include <font.h>
 #include <gdt.h>
+#include <idt.h>
 
 // Set base version to 6
 __attribute__((used, section(".limine_requests"))) static volatile uint64_t
@@ -19,7 +20,6 @@ __attribute__((
     framebuffer_request = {.id = LIMINE_FRAMEBUFFER_REQUEST_ID, .revision = 0};
 
 // Start and End markers for Limine requests
-
 __attribute__((used,
                section(".limine_requests_start"))) static volatile uint64_t
     limine_requests_start_maker[] = LIMINE_REQUESTS_START_MARKER;
@@ -41,10 +41,10 @@ static void hcf(void)
 }
 
 // Mian kernel entry point
-
 void kmain(void)
 {
     initGdt();
+    initIdt();
 
     // bootloader to understand our version
     if (LIMINE_BASE_REVISION_SUPPORTED(limine_base_revision) == false)
@@ -81,18 +81,6 @@ void kmain(void)
 
     init_renderer(global_renderer, &f, psf);
 
-    print(global_renderer, "Hello, Kernel!\n");
-    print(global_renderer, "Hello, Kernel!\n");
-    print(global_renderer, "Hello, Kernel!\n");
-    print(global_renderer, "Hello, Kernel!\n");
-    print(global_renderer, "Hello, Kernel!\n");
-    print(global_renderer, "Hello, Kernel!\n");
-    print(global_renderer, "Hello, Kernel!\n");
-    print(global_renderer, "Hello, Kernel!\n");
-    print(global_renderer, "Hello, Kernel!\n");
-    print(global_renderer, "Hello, Kernel!\n");
-    print(global_renderer, "Hello, Kernel!\n");
-    print(global_renderer, "Hello, Kernel!\n");
     print(global_renderer, "Hello, Kernel!\n");
 
     hcf();
