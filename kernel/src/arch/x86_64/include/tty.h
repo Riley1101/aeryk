@@ -6,25 +6,28 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define WHITE 0xffffffff
-#define SILVER 0xffc0c0c0
-#define GRAY 0xff808080
-#define BGRAY 0xffC0C0C0
-#define DGRAY 0xff404040
-#define BLACK 0xff000000
-#define PINK 0xffFF1493
-#define GREEN 0xff008000
-#define RED 0xff800000
-#define PURPLE 0xff800080
-#define ORANGE 0xffFF4500
-#define CYAN 0xff008080
-#define YELLOW 0xffFFD700
-#define BROWN 0xffA52A2A
-#define BLUE 0xff000080
-#define DBLUE 0xff000030
-#define BRED 0xffFF0000
-#define BBLUE 0xff0000FF
-#define BGREEN 0xff00FF00
+// Gruvbox Dark palette
+#define BLACK 0xff282828
+#define RED 0xffcc241d
+#define GREEN 0xff98971a
+#define YELLOW 0xffd79921
+#define BLUE 0xff458588
+#define PURPLE 0xffb16286
+#define CYAN 0xff689d6a
+#define WHITE 0xffa89984
+// Bright variants
+#define BBLACK 0xff928374
+#define BRED 0xfffb4934
+#define BGREEN 0xffb8bb26
+#define BYELLOW 0xfffabd2f
+#define BBLUE 0xff83a598
+#define BPURPLE 0xffd3869b
+#define BCYAN 0xff8ec07c
+#define BWHITE 0xffebdbb2
+// Semantic aliases
+#define FG BWHITE
+#define BG BLACK
+#define ORANGE 0xfffe8019
 #define TBLACK 0x00000000
 
 struct Point

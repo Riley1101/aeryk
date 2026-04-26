@@ -6,7 +6,7 @@ Renderer *global_renderer;
 
 void init_renderer(Renderer *renderer, FrameBuffer *framebuffer, struct PSF1_FONT *psf1_font)
 {
-    renderer->color = GREEN;
+    renderer->color = FG;
 
     renderer->cursor_position.x = 0;
     renderer->cursor_position.y = 0;
