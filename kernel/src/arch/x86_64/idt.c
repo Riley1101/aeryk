@@ -93,7 +93,10 @@ void initIdt()
     setIdtGate(46, (uint64_t)isr46, 0x08, 0, 0x8E);
     setIdtGate(47, (uint64_t)isr47, 0x08, 0, 0x8E);
 
+// TODO Cross compile these tests to avoid arch dependent flags
+#ifdef __x86_64__
     asm volatile("lidt (%0)" : : "r"(&idt_ptr));
+#endif
 };
 
 static const char *exception_messages[32] = {
@@ -137,7 +140,15 @@ void isr_handler(struct interrupt_frame *frame)
     {
         print(global_renderer, "EXCEPTION: ");
         print(global_renderer, exception_messages[frame->int_no]);
+
+// TODO Cross compile these tests to avoid arch dependent flags
+#ifdef __x86_64__
         asm volatile("cli; hlt");
+#else
+        while (1)
+        {
+        }
+#endif
     }
     else
     {

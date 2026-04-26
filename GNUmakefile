@@ -234,12 +234,29 @@ ifeq ($(ARCH),loongarch64)
 	mcopy -i $(IMAGE_NAME).hdd@@1M limine/BOOTLOONGARCH64.EFI ::/EFI/BOOT
 endif
 
+unity/src/unity.c:
+	git clone https://github.com/ThrowTheSwitch/Unity.git unity --depth=1
+
+.PHONY: test
+test: unity/src/unity.c
+	mkdir -p tests/bin
+	$(HOST_CC) $(HOST_CFLAGS) -std=gnu11 \
+	    -I kernel/src/arch/x86_64/include \
+	    -I kernel/src \
+	    -I unity/src \
+	    tests/stubs.c \
+	    tests/test_idt.c \
+	    kernel/src/arch/x86_64/idt.c \
+	    unity/src/unity.c \
+	    -o tests/bin/test_runner
+	./tests/bin/test_runner
+
 .PHONY: clean
 clean:
 	$(MAKE) -C kernel clean
-	rm -rf iso_root $(IMAGE_NAME).iso $(IMAGE_NAME).hdd
+	rm -rf iso_root $(IMAGE_NAME).iso $(IMAGE_NAME).hdd tests/bin
 
 .PHONY: distclean
 distclean:
 	$(MAKE) -C kernel distclean
-	rm -rf iso_root *.iso *.hdd limine edk2-ovmf
+	rm -rf iso_root *.iso *.hdd limine edk2-ovmf unity tests/bin

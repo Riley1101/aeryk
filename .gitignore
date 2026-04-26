@@ -1,5 +1,7 @@
 /limine
 /edk2-ovmf
+/unity
+/tests/bin
 *.iso
 *.hdd
 *.log
