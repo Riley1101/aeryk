@@ -8,10 +8,25 @@ void print(Renderer *r, const char *str)
     (void)r;
     (void)str;
 }
+
+typedef struct {
+    uint16_t port;
+    uint8_t value;
+} PortWrite;
+
+#define MAX_PORT_LOG 16
+PortWrite portb_log[MAX_PORT_LOG];
+int portb_log_count = 0;
+
+void reset_portb_log(void) { portb_log_count = 0; }
+
 void out_portb(uint16_t port, uint8_t value)
 {
-    (void)port;
-    (void)value;
+    if (portb_log_count < MAX_PORT_LOG) {
+        portb_log[portb_log_count].port = port;
+        portb_log[portb_log_count].value = value;
+        portb_log_count++;
+    }
 }
 
 /* Stub ISR handlers — referenced by initIdt, needed to satisfy the linker */

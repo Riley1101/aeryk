@@ -1,9 +1,6 @@
 #ifndef FONT_H
 #define FONT_H
 
-#include <stddef.h>
-#include <stdint.h>
-
 struct limine_module_response;
 
 struct PSF1_HEADER
