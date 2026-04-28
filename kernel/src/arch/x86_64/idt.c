@@ -13,7 +13,9 @@ struct idt_ptr_struct idt_ptr;
 static irq_handler_t irq_handlers[IRQ_COUNT];
 
 void irq_install_handler(int irq, irq_handler_t handler)
+
 {
+
     irq_handlers[irq] = handler;
 }
 
@@ -43,6 +45,10 @@ void initIdt()
 
     out_portb(0x21, 0x01);
     out_portb(0xA1, 0x01);
+
+    // Unmask all IRQs
+    out_portb(0x21, 0x00);
+    out_portb(0xA1, 0x00);
 
     setIdtGate(0, (uint64_t)isr0, 0x08, 0, 0x8E);
     setIdtGate(1, (uint64_t)isr1, 0x08, 0, 0x8E);
@@ -152,8 +158,8 @@ void isr_handler(struct interrupt_frame *frame)
     }
     else
     {
-        int irq = frame->int_no - 32;
-        if (irq_handlers[irq])
+        int irq = (int)frame->int_no - 32;
+        if (irq >= 0 && irq < IRQ_COUNT && irq_handlers[irq])
             irq_handlers[irq](frame);
 
         if (frame->int_no >= 40)

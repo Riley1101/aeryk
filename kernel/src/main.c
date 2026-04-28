@@ -7,6 +7,7 @@
 #include <font.h>
 #include <gdt.h>
 #include <idt.h>
+#include <timer.h>
 
 // Set base version to 6
 __attribute__((used, section(".limine_requests"))) static volatile uint64_t
@@ -80,6 +81,15 @@ void kmain(void)
     loadPSF1("cp850-8x16.psf", psf, (struct limine_module_response *)module_request.response);
 
     init_renderer(global_renderer, &f, psf);
+
+    init_timer();
+
+    asm volatile("sti");
+
+    for (size_t i = 0; i < 100; i++)
+    {
+        asm volatile("int $32");
+    }
 
     print(global_renderer, "Hello, Kernel!\n");
 
