@@ -1,56 +1,61 @@
 #include "limine.h"
+#include "pmm.h"
 #include <font.h>
 #include <gdt.h>
 #include <idt.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <stdio.h>
 #include <timer.h>
 #include <tty.h>
 
-// Set base version to 6
+// --- START MARKER ---
+__attribute__((used,
+               section(".limine_requests_start"))) static volatile uint64_t
+    limine_requests_start_marker[] = LIMINE_REQUESTS_START_MARKER;
+
+// --- LIMINE REQUESTS ---
 __attribute__((used, section(".limine_requests"))) static volatile uint64_t
     limine_base_revision[] = LIMINE_BASE_REVISION(6);
 
-// Limine requests can be load anywhere
 __attribute__((
     used,
     section(
         ".limine_requests"))) static volatile struct limine_framebuffer_request
     framebuffer_request = {.id = LIMINE_FRAMEBUFFER_REQUEST_ID, .revision = 0};
 
-// Start and End markers for Limine requests
-__attribute__((used,
-               section(".limine_requests_start"))) static volatile uint64_t
-    limine_requests_start_maker[] = LIMINE_REQUESTS_START_MARKER;
-
-__attribute__((used, section(".limine_requests_end"))) static volatile uint64_t
-    limine_requests_end_maker[] = LIMINE_REQUESTS_END_MARKER;
-
 __attribute__((
     used,
     section(".limine_requests"))) static volatile struct limine_module_request
     module_request = {.id = LIMINE_MODULE_REQUEST_ID, .revision = 0};
 
-// Halt and catch fire function
+__attribute__((
+    used, section(".limine_requests"))) volatile struct limine_memmap_request
+    memmap_request = {.id = LIMINE_MEMMAP_REQUEST_ID, .revision = 0};
+
+__attribute__((used,
+               section(".limine_requests"))) volatile struct limine_hhdm_request
+    hhdm_request = {.id = LIMINE_HHDM_REQUEST_ID, .revision = 0};
+
+// --- END MARKER ---
+__attribute__((used, section(".limine_requests_end"))) static volatile uint64_t
+    limine_requests_end_marker[] = LIMINE_REQUESTS_END_MARKER;
+
 static void hcf(void) {
   for (;;) {
     asm("hlt");
   }
 }
 
-// Mian kernel entry point
+// Main kernel entry point
 void kmain(void) {
   initGdt();
   initIdt();
 
-  // bootloader to understand our version
   if (LIMINE_BASE_REVISION_SUPPORTED(limine_base_revision) == false) {
     hcf();
   }
 
-  // make sure we have frame buffer
   if (framebuffer_request.response == NULL ||
       framebuffer_request.response->framebuffer_count < 1) {
     hcf();
@@ -77,13 +82,16 @@ void kmain(void) {
   loadPSF1("cp850-8x16.psf", psf,
            (struct limine_module_response *)module_request.response);
 
+  // Initialize the screen FIRST
   init_renderer(global_renderer, &f, psf);
+
+  initPMM();
 
   init_timer();
 
   asm volatile("sti");
 
-  print(global_renderer, "Hello, Kernel!\n");
+  print(global_renderer, "Hello, Kernel! Memory active.\n");
 
   hcf();
 }

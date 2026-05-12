@@ -62,6 +62,16 @@ make run-bios  # run in QEMU (BIOS)
 make clean
 ```
 
+
+## LSP
+
+You can use bear to generate a compile command.json file for LSP support. This is required for some features of the LSP to work, such as "Go to definition" and "Find references".
+
+```sh
+bear -- make 
+```
+
 ## Sandbox
 
 This is somewhat cleaned repo. A full sandbox is available where I test around is in [oands](https://github.com/Riley1101/oands)
+
