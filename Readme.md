@@ -18,6 +18,7 @@ A x86_64 kernel written in C, booted via the [Limine](https://codeberg.org/Limin
 | Feb 2026 | Framebuffer TTY and PSF1 font rendering |
 | Mrh 2026 | Global Descriptor Table (GDT)           |
 | Apr 2026 | Interrupt Descriptor Table (IDT)        |
+| May 2026 | Memory Management UNIT (MMU)            |
 
 ## Progress
 
@@ -26,8 +27,8 @@ A x86_64 kernel written in C, booted via the [Limine](https://codeberg.org/Limin
 - [x] Font rendering (PSF1)
 - [x] GDT
 - [x] IDT
-- [ ] Physical memory manager
-- [ ] Virtual memory / paging
+- [x] Physical memory manager
+- [x] Virtual memory / paging
 - [ ] Heap allocator
 - [ ] Keyboard driver
 - [ ] Scheduler / processes

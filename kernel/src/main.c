@@ -1,13 +1,14 @@
 #include "limine.h"
-#include "pmm.h"
 #include <font.h>
 #include <gdt.h>
 #include <idt.h>
+#include <pmm.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <timer.h>
 #include <tty.h>
+#include <vmm.h>
 
 // --- START MARKER ---
 __attribute__((used,
@@ -86,6 +87,7 @@ void kmain(void) {
   init_renderer(global_renderer, &f, psf);
 
   initPMM();
+  initVMM();
 
   init_timer();
 
