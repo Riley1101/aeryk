@@ -73,8 +73,6 @@ void initPMM(void) {
   for (size_t i = 0; i < bitmap_size; i += PAGE_SIZE) {
     bitmap_set((bitmap_phys + i) / PAGE_SIZE);
   }
-
-  print(global_renderer, "PMM Initialized\n");
 }
 
 void *pmm_alloc_page(void) {
