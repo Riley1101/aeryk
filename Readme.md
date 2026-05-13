@@ -19,6 +19,7 @@ A x86_64 kernel written in C, booted via the [Limine](https://codeberg.org/Limin
 | Mrh 2026 | Global Descriptor Table (GDT)           |
 | Apr 2026 | Interrupt Descriptor Table (IDT)        |
 | May 2026 | Memory Management UNIT (MMU)            |
+| May 2026 | APIC and Keyboard driver            |
 
 ## Progress
 
@@ -29,8 +30,9 @@ A x86_64 kernel written in C, booted via the [Limine](https://codeberg.org/Limin
 - [x] IDT
 - [x] Physical memory manager
 - [x] Virtual memory / paging
+- [x] APIC
+- [x] Keyboard driver
 - [ ] Heap allocator
-- [ ] Keyboard driver
 - [ ] Scheduler / processes
 - [ ] Syscall interface
 - [ ] Filesystem (VFS)
