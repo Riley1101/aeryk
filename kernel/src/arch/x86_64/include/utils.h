@@ -3,8 +3,7 @@
 
 #include <stdint.h>
 
-static void hcf(void);
-
 void out_portb(uint16_t port, uint8_t value);
+uint8_t in_portb(uint16_t port);
 
 #endif

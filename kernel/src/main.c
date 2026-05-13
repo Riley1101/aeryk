@@ -1,3 +1,4 @@
+#include "arch/x86_64/drivers/keyboard.h"
 #include "limine.h"
 #include <apic.h>
 #include <font.h>
@@ -92,6 +93,9 @@ void kmain(void) {
 
   initAPIC();
 
+  // Route irq 1 to idt 33
+  ioapic_set_irq(1, 0, 33);
+
   uint32_t svr = lapic_read(LAPIC_SVR);
 
   if ((svr & 0x100) != 0) {
@@ -101,10 +105,10 @@ void kmain(void) {
   }
 
   initTimer();
+  initKeyboard();
 
   asm volatile("sti");
 
   print(global_renderer, "Hello, Kernel! Memory active.\n");
-
   hcf();
 }

@@ -77,8 +77,10 @@ isr_common_stub:
     push r15
 
     mov rdi, rsp        ; arg0: pointer to interrupt_frame
-    and rsp, -16
+    mov rbp, rsp        ; save frame pointer in callee-saved reg
+    and rsp, -16        ; align stack for ABI
     call isr_handler
+    mov rsp, rbp        ; restore frame pointer (rbp preserved by callee)
 
     pop r15
     pop r14
