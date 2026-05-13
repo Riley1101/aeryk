@@ -60,5 +60,4 @@ void initVMM(void) {
   // The mask 0x000FFFFFFFFFF000 clears those flag bits and ensures the address
   // is page-aligned
   kernel_pml4 = (uint64_t *)((cr3 & 0x000FFFFFFFFFF000) + hhdm_offset);
-  print(global_renderer, "VMM Initialized.\n");
 }

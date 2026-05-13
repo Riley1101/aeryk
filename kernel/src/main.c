@@ -89,7 +89,11 @@ void kmain(void) {
   init_renderer(global_renderer, &f, psf);
 
   initPMM();
+
+  print(global_renderer, "[0] PMM Initialized\n");
+
   initVMM();
+  print(global_renderer, "[1] VMM Initialized.\n");
 
   initAPIC();
 
@@ -103,12 +107,11 @@ void kmain(void) {
   } else {
     print(global_renderer, "[!] ERROR: APIC failed to enable.\n");
   }
-
   initTimer();
+  print(global_renderer, "[3] IRQ0 PIT Timer calibration started.\n");
+
   initKeyboard();
-
+  print(global_renderer, "[4] IRQ1 keyboard listening...\n");
   asm volatile("sti");
-
-  print(global_renderer, "Hello, Kernel! Memory active.\n");
   hcf();
 }
