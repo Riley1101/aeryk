@@ -1,4 +1,5 @@
 #include "limine.h"
+#include <apic.h>
 #include <font.h>
 #include <gdt.h>
 #include <idt.h>
@@ -89,7 +90,17 @@ void kmain(void) {
   initPMM();
   initVMM();
 
-  init_timer();
+  initAPIC();
+
+  uint32_t svr = lapic_read(LAPIC_SVR);
+
+  if ((svr & 0x100) != 0) {
+    print(global_renderer, "[2] APIC verified online.\n");
+  } else {
+    print(global_renderer, "[!] ERROR: APIC failed to enable.\n");
+  }
+
+  initTimer();
 
   asm volatile("sti");
 

@@ -41,11 +41,11 @@ void vmm_map_page(uint64_t *pml4, uint64_t virtual_addr, uint64_t physical_addr,
   if (!pdpt)
     return;
 
-  uint64_t *pd = get_next_level(pml4, pdpt_entry);
+  uint64_t *pd = get_next_level(pdpt, pdpt_entry);
   if (!pd)
     return;
 
-  uint64_t *pt = get_next_level(pml4, pd_entry);
+  uint64_t *pt = get_next_level(pd, pd_entry);
   if (!pt)
     return;
   pt[pt_entry] = physical_addr | flags;
@@ -59,6 +59,6 @@ void initVMM(void) {
 
   // The mask 0x000FFFFFFFFFF000 clears those flag bits and ensures the address
   // is page-aligned
-  kernel_pml4 = (uint64_t *)((cr3 & 0x000FFFFFFFFFF000));
+  kernel_pml4 = (uint64_t *)((cr3 & 0x000FFFFFFFFFF000) + hhdm_offset);
   print(global_renderer, "VMM Initialized.\n");
 }
