@@ -1,8 +1,9 @@
-#include <apic.h>
-#include <idt.h>
+#include "idt.h"
+#include <arch/x86_64/apic/apic.h>
+#include <drivers/display/tty.h>
+#include <lib/utils.h>
 #include <stdint.h>
 #include <string.h>
-#include <utils.h>
 
 #define IDT_SIZE 256
 #define IRQ_COUNT 16

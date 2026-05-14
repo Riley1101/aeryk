@@ -1,5 +1,5 @@
 #include "unity.h"
-#include <idt.h>
+#include <arch/x86_64/cpu/idt.h>
 
 #define IDT_SIZE 256
 extern struct idt_entry_struct idt_entries[IDT_SIZE];

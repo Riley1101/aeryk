@@ -241,12 +241,11 @@ unity/src/unity.c:
 test: unity/src/unity.c
 	mkdir -p tests/bin
 	$(HOST_CC) $(HOST_CFLAGS) -std=gnu11 \
-	    -I kernel/src/arch/x86_64/include \
 	    -I kernel/src \
 	    -I unity/src \
 	    tests/stubs.c \
 	    tests/test_idt.c \
-	    kernel/src/arch/x86_64/idt.c \
+	    kernel/src/arch/x86_64/cpu/idt.c \
 	    unity/src/unity.c \
 	    -o tests/bin/test_runner
 	./tests/bin/test_runner

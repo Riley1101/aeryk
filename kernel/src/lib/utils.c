@@ -1,5 +1,5 @@
+#include "utils.h"
 #include <stdint.h>
-#include <utils.h>
 
 // write some data to port chips
 void out_portb(uint16_t port, uint8_t value) {

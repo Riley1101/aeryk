@@ -1,6 +1,6 @@
+#include <drivers/display/tty.h>
+#include <lib/utils.h>
 #include <stdint.h>
-#include <tty.h>
-#include <utils.h>
 
 Renderer *global_renderer = NULL;
 void print(Renderer *r, const char *str)
@@ -8,6 +8,8 @@ void print(Renderer *r, const char *str)
     (void)r;
     (void)str;
 }
+
+void lapic_eoi(void) {}
 
 typedef struct {
     uint16_t port;

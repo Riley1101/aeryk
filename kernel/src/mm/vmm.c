@@ -1,9 +1,9 @@
 #include "pmm.h"
-#include "tty.h"
+#include "vmm.h"
+#include <drivers/display/tty.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
-#include <vmm.h>
 
 static uint64_t *kernel_pml4 = NULL;
 

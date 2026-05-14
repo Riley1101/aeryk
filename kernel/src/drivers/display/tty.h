@@ -2,7 +2,7 @@
 #define TTY_H 1
 
 #include <stddef.h>
-#include <font.h>
+#include "font.h"
 #include <stdbool.h>
 #include <stdint.h>
 

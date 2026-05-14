@@ -1,6 +1,6 @@
-#include "tty.h"
+#include "pmm.h"
+#include <drivers/display/tty.h>
 #include <limine.h>
-#include <pmm.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>

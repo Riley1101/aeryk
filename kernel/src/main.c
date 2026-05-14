@@ -1,16 +1,16 @@
-#include "arch/x86_64/drivers/keyboard.h"
 #include "limine.h"
-#include <apic.h>
-#include <font.h>
-#include <gdt.h>
-#include <idt.h>
-#include <pmm.h>
+#include <arch/x86_64/apic/apic.h>
+#include <arch/x86_64/cpu/gdt.h>
+#include <arch/x86_64/cpu/idt.h>
+#include <arch/x86_64/timer/timer.h>
+#include <drivers/display/font.h>
+#include <drivers/display/tty.h>
+#include <drivers/keyboard/keyboard.h>
+#include <mm/pmm.h>
+#include <mm/vmm.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <timer.h>
-#include <tty.h>
-#include <vmm.h>
 
 // --- START MARKER ---
 __attribute__((used,

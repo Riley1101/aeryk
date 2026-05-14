@@ -1,6 +1,6 @@
-#include <font.h>
+#include "font.h"
+#include "tty.h"
 #include <stdint.h>
-#include <tty.h>
 
 Renderer *global_renderer;
 

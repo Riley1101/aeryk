@@ -1,6 +1,5 @@
 #ifndef IDT
 #define IDT
-#include "tty.h"
 
 #include <stdint.h>
 

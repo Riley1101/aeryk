@@ -1,8 +1,8 @@
-#include <apic.h>
-#include <pmm.h>
+#include "apic.h"
+#include <lib/utils.h>
+#include <mm/pmm.h>
+#include <mm/vmm.h>
 #include <stdint.h>
-#include <utils.h>
-#include <vmm.h>
 
 void lapic_write(uint32_t reg, uint32_t value) {
   *((volatile uint32_t *)(LAPIC_BASE + hhdm_offset + reg)) = value;

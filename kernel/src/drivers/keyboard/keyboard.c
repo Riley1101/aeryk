@@ -1,8 +1,8 @@
 #include "keyboard.h"
-#include <idt.h>
+#include <arch/x86_64/cpu/idt.h>
+#include <drivers/display/tty.h>
+#include <lib/utils.h>
 #include <stdint.h>
-#include <tty.h>
-#include <utils.h>
 
 #define PS2DATA_PORT 0x60
 #define PS2STATUS_PORT 0x64
@@ -48,8 +48,10 @@ void initKeyboard() {
   ps2_wait_read();
   uint8_t cmd = in_portb(PS2DATA_PORT);
 
-  cmd |= 0x01 | 0x40;
-  cmd &= ~0x10;
+    // Enable keyboard interrupt (bit 0), scancode translation (bit 6)
+    // Clear keyboard disable (bit 4)
+    cmd |= 0x01 | 0x40;
+    cmd &= ~0x10;
 
   // Write back command byte
   ps2_wait_write();
