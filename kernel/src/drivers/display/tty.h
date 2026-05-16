@@ -7,7 +7,7 @@
 #include <stdint.h>
 
 // Gruvbox Dark palette
-#define BLACK 0xff282828
+#define BLACK 0x00000000
 #define RED 0xffcc241d
 #define GREEN 0xff98971a
 #define YELLOW 0xffd79921
@@ -59,6 +59,7 @@ void init_renderer(Renderer *render, FrameBuffer *buffer, struct PSF1_FONT *psf1
 void print(Renderer *basicrenderer, const char *str);
 void put_char(Renderer *basicrenderer, char chr, unsigned int xOff, unsigned int yOff);
 void clear(Renderer *basicrenderer, uint32_t color, bool resetCursor);
+void scroll(Renderer *renderer);
 
 extern Renderer *global_renderer;
 

@@ -44,74 +44,82 @@ __attribute__((used,
 __attribute__((used, section(".limine_requests_end"))) static volatile uint64_t
     limine_requests_end_marker[] = LIMINE_REQUESTS_END_MARKER;
 
-static void hcf(void) {
-  for (;;) {
-    asm("hlt");
-  }
+static void hcf(void)
+{
+    for (;;)
+    {
+        asm("hlt");
+    }
 }
 
 // Main kernel entry point
-void kmain(void) {
-  initGdt();
-  initIdt();
+void kmain(void)
+{
+    initGdt();
+    initIdt();
 
-  if (LIMINE_BASE_REVISION_SUPPORTED(limine_base_revision) == false) {
+    if (LIMINE_BASE_REVISION_SUPPORTED(limine_base_revision) == false)
+    {
+        hcf();
+    }
+
+    if (framebuffer_request.response == NULL ||
+        framebuffer_request.response->framebuffer_count < 1)
+    {
+        hcf();
+    }
+
+    struct limine_framebuffer *framebuffer =
+        framebuffer_request.response->framebuffers[0];
+
+    FrameBuffer f;
+    {
+        f.base_address = framebuffer->address;
+        f.width = framebuffer->width;
+        f.height = framebuffer->height;
+        f.pixels_per_scan_line = framebuffer->pitch / 4;
+        f.buffer_size = framebuffer->height * framebuffer->pitch;
+    };
+
+    Renderer renderer;
+    global_renderer = &renderer;
+
+    struct PSF1_FONT psf_font;
+    struct PSF1_FONT *psf = &psf_font;
+
+    loadPSF1("cp850-8x16.psf", psf,
+             (struct limine_module_response *)module_request.response);
+
+    // Initialize the screen FIRST
+    init_renderer(global_renderer, &f, psf);
+
+    initPMM();
+
+    print(global_renderer, "[0] PMM Initialized\n");
+
+    initVMM();
+    print(global_renderer, "[1] VMM Initialized.\n");
+
+    initAPIC();
+
+    // Route irq 1 to idt 33
+    ioapic_set_irq(1, 0, 33);
+
+    uint32_t svr = lapic_read(LAPIC_SVR);
+
+    if ((svr & 0x100) != 0)
+    {
+        print(global_renderer, "[2] APIC verified online.\n");
+    }
+    else
+    {
+        print(global_renderer, "[!] ERROR: APIC failed to enable.\n");
+    }
+    initTimer();
+    print(global_renderer, "[3] IRQ0 PIT Timer calibration started.\n");
+
+    initKeyboard();
+    print(global_renderer, "[4] IRQ1 keyboard listening...\n");
+    asm volatile("sti");
     hcf();
-  }
-
-  if (framebuffer_request.response == NULL ||
-      framebuffer_request.response->framebuffer_count < 1) {
-    hcf();
-  }
-
-  struct limine_framebuffer *framebuffer =
-      framebuffer_request.response->framebuffers[0];
-
-  FrameBuffer f;
-  {
-    f.base_address = framebuffer->address;
-    f.width = framebuffer->width;
-    f.height = framebuffer->height;
-    f.pixels_per_scan_line = framebuffer->pitch / 4;
-    f.buffer_size = framebuffer->height * framebuffer->pitch;
-  };
-
-  Renderer renderer;
-  global_renderer = &renderer;
-
-  struct PSF1_FONT psf_font;
-  struct PSF1_FONT *psf = &psf_font;
-
-  loadPSF1("cp850-8x16.psf", psf,
-           (struct limine_module_response *)module_request.response);
-
-  // Initialize the screen FIRST
-  init_renderer(global_renderer, &f, psf);
-
-  initPMM();
-
-  print(global_renderer, "[0] PMM Initialized\n");
-
-  initVMM();
-  print(global_renderer, "[1] VMM Initialized.\n");
-
-  initAPIC();
-
-  // Route irq 1 to idt 33
-  ioapic_set_irq(1, 0, 33);
-
-  uint32_t svr = lapic_read(LAPIC_SVR);
-
-  if ((svr & 0x100) != 0) {
-    print(global_renderer, "[2] APIC verified online.\n");
-  } else {
-    print(global_renderer, "[!] ERROR: APIC failed to enable.\n");
-  }
-  initTimer();
-  print(global_renderer, "[3] IRQ0 PIT Timer calibration started.\n");
-
-  initKeyboard();
-  print(global_renderer, "[4] IRQ1 keyboard listening...\n");
-  asm volatile("sti");
-  hcf();
 }
