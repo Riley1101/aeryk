@@ -1,4 +1,5 @@
 #include "arch/x86_64/drivers/keyboard.h"
+#include "arch/x86_64/slab.h"
 #include "limine.h"
 #include <apic.h>
 #include <font.h>
@@ -112,9 +113,20 @@ void kmain(void) {
 
   print("[3] IRQ0 PIT Timer calibration started.\n");
 
-  initKeyboard();
+  print("[4] Slab Allocator kmalloc online.\n");
+  initSlab();
 
-  print("[4] IRQ1 keyboard listening...\n");
+  print("[5] Running slab test with dynamic kmalloc.\n");
+  uint32_t *test_ptr = (uint32_t *)kmalloc(sizeof(uint32_t) * 10);
+  if (test_ptr != NULL) {
+    print("[-] kmalloc allocation successful!\n");
+    test_ptr[0] = 1234;
+    kfree(test_ptr);
+    print("[-] kfree released slab chunk cleanly.\n");
+  }
+
+  initKeyboard();
+  print("[6] IRQ1 keyboard listening...\n");
 
   asm volatile("sti");
   hcf();

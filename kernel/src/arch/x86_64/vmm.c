@@ -1,5 +1,4 @@
 #include "pmm.h"
-#include "tty.h"
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
