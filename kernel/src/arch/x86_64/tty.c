@@ -16,30 +16,30 @@ void init_renderer(Renderer *renderer, FrameBuffer *framebuffer,
   return;
 }
 
-void print(Renderer *renderer, const char *str) {
+void print(const char *str) {
   char *chr = (char *)str;
   while (*chr != 0) {
     switch (*chr) {
     case '\n':
-      renderer->cursor_position.x = 0;
-      renderer->cursor_position.y += 16;
+      global_renderer->cursor_position.x = 0;
+      global_renderer->cursor_position.y += 16;
       break;
 
     case '\t':
-      renderer->cursor_position.x += 8;
+      global_renderer->cursor_position.x += 8;
       break;
 
     default:
-      put_char(renderer, *chr, renderer->cursor_position.x,
-               renderer->cursor_position.y);
-      renderer->cursor_position.x += 8;
+      put_char(global_renderer, *chr, global_renderer->cursor_position.x,
+               global_renderer->cursor_position.y);
+      global_renderer->cursor_position.x += 8;
       break;
     }
 
     // TODO! needs scroll
-    if (renderer->cursor_position.x + 8 > renderer->framebuffer->width) {
-      renderer->cursor_position.x = 0;
-      renderer->cursor_position.y += 16;
+    if (global_renderer->cursor_position.x + 8 > global_renderer->framebuffer->width) {
+      global_renderer->cursor_position.x = 0;
+      global_renderer->cursor_position.y += 16;
     }
 
     chr++;

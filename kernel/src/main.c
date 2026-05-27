@@ -90,10 +90,10 @@ void kmain(void) {
 
   initPMM();
 
-  print(global_renderer, "[0] PMM Initialized\n");
+  print("[0] PMM Initialized\n");
 
   initVMM();
-  print(global_renderer, "[1] VMM Initialized.\n");
+  print("[1] VMM Initialized.\n");
 
   initAPIC();
 
@@ -103,15 +103,19 @@ void kmain(void) {
   uint32_t svr = lapic_read(LAPIC_SVR);
 
   if ((svr & 0x100) != 0) {
-    print(global_renderer, "[2] APIC verified online.\n");
+    print("[2] APIC verified online.\n");
   } else {
-    print(global_renderer, "[!] ERROR: APIC failed to enable.\n");
+    print("[!] ERROR: APIC failed to enable.\n");
   }
+
   initTimer();
-  print(global_renderer, "[3] IRQ0 PIT Timer calibration started.\n");
+
+  print("[3] IRQ0 PIT Timer calibration started.\n");
 
   initKeyboard();
-  print(global_renderer, "[4] IRQ1 keyboard listening...\n");
+
+  print("[4] IRQ1 keyboard listening...\n");
+
   asm volatile("sti");
   hcf();
 }

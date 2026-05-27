@@ -36,7 +36,7 @@ void onIrq1(struct interrupt_frame *frame) {
     char c = kbd_us[scancode];
     if (c != 0) {
       char str[2] = {c, '\0'};
-      print(global_renderer, str);
+      print(str);
     }
   }
 }

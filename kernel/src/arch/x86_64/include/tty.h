@@ -56,7 +56,7 @@ typedef struct
 
 // TODO! Eventually add custom fonts
 void init_renderer(Renderer *render, FrameBuffer *buffer, struct PSF1_FONT *psf1_font);
-void print(Renderer *basicrenderer, const char *str);
+void print(const char *str);
 void put_char(Renderer *basicrenderer, char chr, unsigned int xOff, unsigned int yOff);
 void clear(Renderer *basicrenderer, uint32_t color, bool resetCursor);
 

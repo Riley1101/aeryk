@@ -24,7 +24,7 @@ extern volatile struct limine_hhdm_request hhdm_request;
 
 void initPMM(void) {
   if (!memmap_request.response || !hhdm_request.response) {
-    print(global_renderer, "PANIC: Missing limine memory map or HHDM!\n");
+    print("PANIC: Missing limine memory map or HHDM!\n");
     for (;;)
       asm("hlt");
   }

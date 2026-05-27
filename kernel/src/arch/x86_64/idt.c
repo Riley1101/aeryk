@@ -124,8 +124,8 @@ void isr_handler(struct interrupt_frame *frame)
     // TODO! remove this this is to track exception happen in each frame
     if (frame->int_no < 32)
     {
-        print(global_renderer, "EXCEPTION: ");
-        print(global_renderer, exception_messages[frame->int_no]);
+        print("EXCEPTION: ");
+        print(exception_messages[frame->int_no]);
 
 // TODO Cross compile these tests to avoid arch dependent flags
 #ifdef __x86_64__
