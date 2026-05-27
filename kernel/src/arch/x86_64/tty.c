@@ -36,10 +36,12 @@ void print(const char *str) {
       break;
     }
 
-    // TODO! needs scroll
     if (global_renderer->cursor_position.x + 8 > global_renderer->framebuffer->width) {
       global_renderer->cursor_position.x = 0;
       global_renderer->cursor_position.y += 16;
+    }
+    if (global_renderer->cursor_position.y + 16 > global_renderer->framebuffer->height) {
+      clear(global_renderer, BG, true);
     }
 
     chr++;

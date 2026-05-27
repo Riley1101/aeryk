@@ -1,11 +1,12 @@
 #include "arch/x86_64/drivers/keyboard.h"
-#include "arch/x86_64/slab.h"
 #include "limine.h"
+#include "process.h"
 #include <apic.h>
 #include <font.h>
 #include <gdt.h>
 #include <idt.h>
 #include <pmm.h>
+#include <slab.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -116,7 +117,10 @@ void kmain(void) {
   print("[4] Slab Allocator kmalloc online.\n");
   initSlab();
 
+  initScheduler();
+
   print("[5] Running slab test with dynamic kmalloc.\n");
+
   uint32_t *test_ptr = (uint32_t *)kmalloc(sizeof(uint32_t) * 10);
   if (test_ptr != NULL) {
     print("[-] kmalloc allocation successful!\n");
@@ -126,8 +130,8 @@ void kmain(void) {
   }
 
   initKeyboard();
-  print("[6] IRQ1 keyboard listening...\n");
 
+  print("[6] IRQ1 keyboard listening...\n");
   asm volatile("sti");
   hcf();
 }

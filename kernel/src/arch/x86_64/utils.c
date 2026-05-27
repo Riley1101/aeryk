@@ -12,3 +12,4 @@ uint8_t in_portb(uint16_t port) {
   asm volatile("inb %1, %0" : "=a"(rv) : "dN"(port));
   return rv;
 }
+

@@ -13,6 +13,7 @@ A x86_64 kernel written in C, booted via the [Limine](https://codeberg.org/Limin
 | May 2026 | Memory Management UNIT (MMU)            |
 | May 2026 | APIC and Keyboard driver                |
 | May 2026 | Slab allocator                          |
+| Jun 2026 | MLFQ & Process                          |
 
 ## Progress
 
@@ -26,7 +27,7 @@ A x86_64 kernel written in C, booted via the [Limine](https://codeberg.org/Limin
 - [x] APIC
 - [x] Keyboard driver
 - [x] Heap allocator
-- [ ] Scheduler / processes
+- [x] Scheduler / processes MLFQ
 - [ ] Syscall interface
 - [ ] Filesystem (VFS)
 

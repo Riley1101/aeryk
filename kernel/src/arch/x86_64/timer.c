@@ -1,8 +1,11 @@
+#include "timer.h"
+#include "scheduler.h"
 #include <apic.h>
 #include <idt.h>
 #include <stdint.h>
 #include <tty.h>
 #include <utils.h>
+#include <process.h>
 
 #define PIT_CMD 0x43
 #define PIT_CHANNEL0 0x40
@@ -15,6 +18,7 @@ const uint32_t freq = 100;
 void onIrq0(struct interrupt_frame *frame) {
   (void)frame;
   ticks += 1;
+  mlfqOnTick();
 }
 
 // https://wiki.osdev.org/APIC_Timer
@@ -49,3 +53,4 @@ void initTimer() {
 
   irq_install_handler(0, onIrq0);
 }
+
