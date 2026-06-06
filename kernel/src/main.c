@@ -1,4 +1,5 @@
 #include "arch/x86_64/drivers/keyboard.h"
+#include "arch/x86_64/drivers/serial.h"
 #include "limine.h"
 #include "process.h"
 #include <apic.h>
@@ -89,6 +90,8 @@ void kmain(void) {
 
   // Initialize the screen FIRST
   init_renderer(global_renderer, &f, psf);
+
+  init_serial();
 
   initPMM();
 

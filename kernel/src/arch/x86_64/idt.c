@@ -4,6 +4,8 @@
 #include <string.h>
 #include <utils.h>
 
+#include <arch/x86_64/drivers/serial.h>
+
 #define IDT_SIZE 256
 #define IRQ_COUNT 16
 
@@ -120,8 +122,9 @@ static const char *exception_messages[32] = {
 void isr_handler(struct interrupt_frame *frame) {
   // TODO! remove this this is to track exception happen in each frame
   if (frame->int_no < 32) {
-    print("EXCEPTION: ");
-    print(exception_messages[frame->int_no]);
+    serial_print("\n KERNEL PANIC **\n");
+    serial_print("EXCEPTION:");
+    serial_print(exception_messages[frame->int_no]);
 
 // TODO Cross compile these tests to avoid arch dependent flags
 #ifdef __x86_64__

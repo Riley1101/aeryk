@@ -260,3 +260,12 @@ clean:
 distclean:
 	$(MAKE) -C kernel distclean
 	rm -rf iso_root *.iso *.hdd limine edk2-ovmf unity tests/bin
+
+.PHONY: debug
+debug: edk2-ovmf $(IMAGE_NAME).iso
+	qemu-system-$(ARCH) \
+		-M q35 \
+		-drive if=pflash,unit=0,format=raw,file=edk2-ovmf/ovmf-code-$(ARCH).fd,readonly=on \
+		-cdrom $(IMAGE_NAME).iso \
+		-s -S \
+		$(QEMUFLAGS)
