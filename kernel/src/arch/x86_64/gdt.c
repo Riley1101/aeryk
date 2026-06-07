@@ -17,8 +17,14 @@ void initGdt()
 
     setGdtGate(1, 0, 0xFFFFFFFF, 0x9A, 0xAF); // Kernel Code (64-bit, L bit set)
     setGdtGate(2, 0, 0xFFFFFFFF, 0x92, 0xCF); // Kernel Data
-    setGdtGate(3, 0, 0xFFFFFFFF, 0xFA, 0xAF); // User Code (64-bit, DPL=3)
-    setGdtGate(4, 0, 0xFFFFFFFF, 0xF2, 0xCF); // User Data (DPL=3)
+
+    /**
+     * AMD found a performance tweak to get the user space without going through GDT, by just reording UserData above User Code
+     * For SYSRET
+     */
+    setGdtGate(3, 0, 0xFFFFFFFF, 0xF2, 0xCF); // User Data (DPL=3)
+
+    setGdtGate(4, 0, 0xFFFFFFFF, 0xFA, 0xAF); // User Code (64-bit, DPL=3)
 
     writeTSS(5, 0x0);
     gdt_flush(&gdt_ptr);

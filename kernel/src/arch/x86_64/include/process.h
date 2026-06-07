@@ -24,7 +24,7 @@ typedef struct process {
   struct process *queue_prev;
   struct process *next;
   struct process *prev;
-  
+
   void (*entrypoint)();
 } process_t;
 
@@ -36,5 +36,7 @@ extern process_t *current_process;
 extern process_t *idle_process;
 
 void schedule(void);
+
+void enter_usermode(uint64_t entry_point, uint64_t user_stack);
 
 #endif // !PROCESS_H

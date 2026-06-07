@@ -118,3 +118,19 @@ void schedule() {
 
   switch_task(prev, next);
 }
+
+void enter_usermode(uint64_t entry_point, uint64_t user_stack) {
+  asm volatile("cli \n"
+               "push $0x1B \n"  // User data selector
+               "push %0 \n"     // User Stack pointer
+               "push $0x202 \n" // User Rflags
+               "push $0x23 \n"  // User code selector (0x20 | RPL 3)
+               "push %1 \n"     // User RIP entry point
+               "iretq"
+               :
+               : "r"(user_stack), "r"(entry_point)
+               : "memory"
+
+  );
+}
+

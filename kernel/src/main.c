@@ -2,6 +2,7 @@
 #include "arch/x86_64/drivers/serial.h"
 #include "limine.h"
 #include "process.h"
+#include "syscall.h"
 #include <apic.h>
 #include <font.h>
 #include <gdt.h>
@@ -53,6 +54,18 @@ static void hcf(void) {
   }
 }
 
+// A simple user-mode program to test
+void test_user_program() {
+  const char *msg = "Hello from Ring 3 via SYSCALL!\n";
+  asm volatile("mov $1, %%rax \n" // sys_write
+               "mov %0, %%rdi \n" // arg0 = msg
+               "syscall \n"
+               "1: jmp 1b" // Infinite loop after syscall
+               :
+               : "r"(msg)
+               : "rax", "rdi", "rcx", "r11");
+}
+
 // Main kernel entry point
 void kmain(void) {
   initGdt();
@@ -91,7 +104,7 @@ void kmain(void) {
   // Initialize the screen FIRST
   init_renderer(global_renderer, &f, psf);
 
-  init_serial();
+  // init_serial();
 
   initPMM();
 
@@ -135,6 +148,24 @@ void kmain(void) {
   initKeyboard();
 
   print("[6] IRQ1 keyboard listening...\n");
+
   asm volatile("sti");
+
+  initSyscalls();
+
+  print("[7] Syscalls initialized...\n");
+
+  void *user_stack = pmm_alloc_page();
+  uint64_t user_stack_top = (uint64_t)user_stack + hhdm_offset + PAGE_SIZE;
+
+  void *kernel_stack = pmm_alloc_page();
+  kernel_rsp_scratch = (uint64_t)kernel_stack + hhdm_offset + PAGE_SIZE;
+
+  print("[-] Jumping into Ring 3");
+
+  // Know that this will result in a seg fault, because test_user_program currently
+  // lives in kernel space. we have to support syswrite to and sysexit
+  // enter_usermode((uint64_t)test_user_program, user_stack_top);
+
   hcf();
 }
