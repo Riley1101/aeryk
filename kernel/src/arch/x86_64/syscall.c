@@ -1,5 +1,6 @@
 #include <utils.h>
 
+#include <process.h>
 #include <stdint.h>
 #include <syscall.h>
 #include <tty.h>
@@ -14,9 +15,25 @@ struct syscall_frame {
 
 void syscall_handler_c(struct syscall_frame *frame) {
   switch (frame->rax) {
-  case 1:
-    print((const char *)frame->rdi);
+  case 1: // sys_write
+    if (frame->rdi == 1) {
+      print((const char *)frame->rsi);
+    }
+    frame->rax = frame->rdx;
     break;
+  case 60: // sys_exit
+    print("\n[Syscall] Process exited.\n");
+
+    if (current_process) {
+      current_process->state = PROCESS_DEAD;
+      schedule();
+    }
+
+    for (;;) {
+      asm volatile("hlt");
+    }
+    break;
+
   default:
     print("unknown syscall");
     frame->rax = -1;

@@ -53,6 +53,11 @@ void writeTSS(uint32_t num, uint64_t rsp0)
     tss_entry.iomap_base = sizeof(struct tss_entry_struct);
 }
 
+void set_kernel_stack(uint64_t rsp0)
+{
+    tss_entry.rsp0 = rsp0;
+}
+
 void setGdtGate(uint32_t num, uint32_t base, uint32_t limit, uint8_t access, uint8_t gran)
 {
     gdt_entries[num].base_low = (base & 0xFFFF);

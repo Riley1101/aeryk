@@ -1,6 +1,8 @@
+#include "gdt.h"
 #include "pmm.h"
 #include "scheduler.h"
 #include "slab.h"
+#include "syscall.h"
 #include "vmm.h"
 #include <process.h>
 #include <stddef.h>
@@ -39,6 +41,10 @@ void initScheduler() {
   idle_process->state = PROCESS_RUNNING;
   idle_process->priority = 3;
   idle_process->ticks_executed = 0;
+
+  // Make sure idle process know its pagetable
+  idle_process->cr3 = (uint64_t)vmm_get_kernel_pml4() - hhdm_offset;
+  idle_process->kernel_stack = NULL;
 
   current_process = idle_process;
 
@@ -116,6 +122,12 @@ void schedule() {
   current_process = next;
   current_process->state = PROCESS_RUNNING;
 
+  if (next->kernel_stack) {
+      uint64_t next_stack_top = (uint64_t) next->kernel_stack + PAGE_SIZE;
+      kernel_rsp_scratch = next_stack_top;
+      set_kernel_stack(next_stack_top);
+  }
+
   switch_task(prev, next);
 }
 
@@ -133,4 +145,3 @@ void enter_usermode(uint64_t entry_point, uint64_t user_stack) {
 
   );
 }
-
