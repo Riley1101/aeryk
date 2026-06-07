@@ -1,5 +1,6 @@
 #include <utils.h>
 
+#include <arch/x86_64/drivers/keyboard.h>
 #include <process.h>
 #include <stdint.h>
 #include <syscall.h>
@@ -15,6 +16,14 @@ struct syscall_frame {
 
 void syscall_handler_c(struct syscall_frame *frame) {
   switch (frame->rax) {
+  case 0: // sys_read
+    if (frame->rdi == 0) {
+      frame->rax = keyboard_read((char *)frame->rsi, (int)frame->rdx);
+    } else {
+      frame->rax = -1;
+    }
+    break;
+
   case 1: // sys_write
     if (frame->rdi == 1) {
       print((const char *)frame->rsi);
