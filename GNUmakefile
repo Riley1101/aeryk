@@ -237,19 +237,29 @@ endif
 unity/src/unity.c:
 	git clone https://github.com/ThrowTheSwitch/Unity.git unity --depth=1
 
+override TEST_CFLAGS := $(HOST_CFLAGS) -std=gnu11 \
+    -I kernel/src/arch/x86_64/include \
+    -I kernel/src \
+    -I kernel/limine-protocol/include \
+    -I unity/src
+
 .PHONY: test
 test: unity/src/unity.c
 	mkdir -p tests/bin
-	$(HOST_CC) $(HOST_CFLAGS) -std=gnu11 \
-	    -I kernel/src/arch/x86_64/include \
-	    -I kernel/src \
-	    -I unity/src \
-	    tests/stubs.c \
-	    tests/test_idt.c \
-	    kernel/src/arch/x86_64/idt.c \
-	    unity/src/unity.c \
-	    -o tests/bin/test_runner
-	./tests/bin/test_runner
+	$(HOST_CC) $(TEST_CFLAGS) tests/stubs.c tests/test_idt.c kernel/src/arch/x86_64/idt.c unity/src/unity.c -o tests/bin/test_idt
+	$(HOST_CC) $(TEST_CFLAGS) tests/stub_gdt.c tests/test_gdt.c kernel/src/arch/x86_64/gdt.c unity/src/unity.c -o tests/bin/test_gdt
+	$(HOST_CC) $(TEST_CFLAGS) tests/stub_vmm.c tests/test_vmm.c kernel/src/arch/x86_64/vmm.c unity/src/unity.c -o tests/bin/test_vmm
+	$(HOST_CC) $(TEST_CFLAGS) tests/stub_slab.c tests/test_slab.c kernel/src/arch/x86_64/slab.c unity/src/unity.c -o tests/bin/test_slab
+	$(HOST_CC) $(TEST_CFLAGS) tests/stub_scheduler.c tests/test_scheduler.c kernel/src/arch/x86_64/scheduler.c unity/src/unity.c -o tests/bin/test_scheduler
+	$(HOST_CC) $(TEST_CFLAGS) tests/stub_syscall.c tests/test_syscall.c kernel/src/arch/x86_64/syscall.c unity/src/unity.c -o tests/bin/test_syscall
+	$(HOST_CC) $(TEST_CFLAGS) tests/stub_pmm.c tests/test_pmm.c kernel/src/arch/x86_64/pmm.c unity/src/unity.c -o tests/bin/test_pmm
+	./tests/bin/test_idt
+	./tests/bin/test_gdt
+	./tests/bin/test_vmm
+	./tests/bin/test_slab
+	./tests/bin/test_scheduler
+	./tests/bin/test_syscall
+	./tests/bin/test_pmm
 
 .PHONY: clean
 clean:
