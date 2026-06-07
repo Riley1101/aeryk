@@ -14,6 +14,7 @@ struct syscall_frame {
   uint64_t user_rip;
 };
 
+// https://chromium.googlesource.com/chromiumos/docs/+/master/constants/syscalls.md#x86_64-64_bit
 void syscall_handler_c(struct syscall_frame *frame) {
   switch (frame->rax) {
   case 0: // sys_read
