@@ -29,8 +29,14 @@ A x86_64 kernel written in C, booted via the [Limine](https://codeberg.org/Limin
 - [x] Keyboard driver
 - [x] Heap allocator
 - [x] Scheduler / processes MLFQ
-- [x] Serial driver
-- [ ] Syscall interface
+- [x] Serial driver (not complete one, just for debugging instructions to GDB)
+- [x] Syscall interface
+  -  [ ] sys_write and sys_exit
+  -  [ ] Context switching with MLFQ 
+  -  [ ] libc wrapper for syscalls
+- [ ] Initramfs 
+- [ ] Elf loader 
+- [ ] Compositor
 - [ ] Filesystem (VFS)
 
 ## Build
