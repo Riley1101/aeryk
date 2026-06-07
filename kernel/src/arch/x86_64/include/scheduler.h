@@ -3,9 +3,9 @@
 
 #include <process.h>
 
-void mlfqInit();
-void mlfqEnqueue(process_t * proc);
-process_t* mlfqPickNext(void);
-void mlfqOnTick(void);
+void mlfq_init();
+void mlfq_enqueue(process_t * proc);
+process_t* mlfq_pick_next(void);
+void mlfq_on_tick(void);
 
 #endif // !SCHEDULER_H

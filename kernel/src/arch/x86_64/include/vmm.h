@@ -7,7 +7,7 @@
 #define PTE_USER (1ull << 2)
 #define PTE_NX (1ull << 63)
 
-void initVMM(void);
+void init_vmm(void);
 void vmm_map_page(uint64_t *pml4, uint64_t virtual_addr, uint64_t physical_addr,
                   uint64_t flags);
 uint64_t *vmm_get_kernel_pml4(void);

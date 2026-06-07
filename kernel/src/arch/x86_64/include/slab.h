@@ -24,7 +24,7 @@ struct slab_cache {
   struct slab *slabs_full;
 };
 
-void initSlab(void);
+void init_slab(void);
 void *kmalloc(size_t size);
 void kfree(void *ptr);
 

@@ -1,37 +1,18 @@
-#include <stdint.h>
 #include <tty.h>
 #include <utils.h>
 
 Renderer *global_renderer = NULL;
-void print(Renderer *r, const char *str)
-{
-    (void)r;
-    (void)str;
-}
+void print(const char *str) { (void)str; }
 
-typedef struct {
-    uint16_t port;
-    uint8_t value;
-} PortWrite;
+void serial_print(const char *c) { (void)c; }
 
-#define MAX_PORT_LOG 16
-PortWrite portb_log[MAX_PORT_LOG];
-int portb_log_count = 0;
+int lapic_eoi_call_count = 0;
+void reset_lapic_eoi_count(void) { lapic_eoi_call_count = 0; }
+void lapic_eoi(void) { lapic_eoi_call_count++; }
 
-void reset_portb_log(void) { portb_log_count = 0; }
-
-void out_portb(uint16_t port, uint8_t value)
-{
-    if (portb_log_count < MAX_PORT_LOG) {
-        portb_log[portb_log_count].port = port;
-        portb_log[portb_log_count].value = value;
-        portb_log_count++;
-    }
-}
-
-/* Stub ISR handlers — referenced by initIdt, needed to satisfy the linker */
-#define DEF_ISR(n) \
-    void isr##n(void) {}
+/* Stub ISR handlers — referenced by init_idt, needed to satisfy the linker */
+#define DEF_ISR(n)                                                             \
+  void isr##n(void) {}
 DEF_ISR(0)
 DEF_ISR(1)
 DEF_ISR(2)

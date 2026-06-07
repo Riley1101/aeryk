@@ -15,10 +15,10 @@ volatile uint64_t ticks;
 
 const uint32_t freq = 100;
 
-void onIrq0(struct interrupt_frame *frame) {
+void on_irq0(struct interrupt_frame *frame) {
   (void)frame;
   ticks += 1;
-  mlfqOnTick();
+  mlfq_on_tick();
 }
 
 // https://wiki.osdev.org/APIC_Timer
@@ -39,7 +39,7 @@ static uint32_t lapic_calibrate(void) {
   return 0xFFFFFFFF - lapic_read(LAPIC_TIMER_CURCNT);
 }
 
-void initTimer() {
+void init_timer() {
   ticks = 0;
 
   lapic_write(LAPIC_TIMER_DIV, 0x03);
@@ -51,6 +51,6 @@ void initTimer() {
   lapic_write(LAPIC_TIMER_INITCNT,
               (uint32_t)((uint64_t)ticks_per_10ms * 100 / freq));
 
-  irq_install_handler(0, onIrq0);
+  irq_install_handler(0, on_irq0);
 }
 

@@ -32,8 +32,8 @@ static void kernel_thread_stub(void) {
   kernel_thread_exit();
 }
 
-void initScheduler() {
-  mlfqInit();
+void init_scheduler() {
+  mlfq_init();
 
   idle_process = (process_t *)kmalloc(sizeof(process_t));
 
@@ -97,7 +97,7 @@ process_t *create_kernel_thread(void (*entrypoint)()) {
 
   proc->priority = 0;
   proc->ticks_executed = 0;
-  mlfqEnqueue(proc);
+  mlfq_enqueue(proc);
   return proc;
 }
 
@@ -108,10 +108,10 @@ void schedule() {
   process_t *prev = current_process;
 
   if (prev->state == PROCESS_RUNNING && prev != idle_process) {
-    mlfqEnqueue(prev);
+    mlfq_enqueue(prev);
   }
 
-  process_t *next = mlfqPickNext();
+  process_t *next = mlfq_pick_next();
   if (!next) {
     next = idle_process;
   }

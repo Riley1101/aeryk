@@ -5,6 +5,6 @@
 
 extern volatile uint64_t ticks;
 
-void initTimer(void);
+void init_timer(void);
 
 #endif // TIMER_H

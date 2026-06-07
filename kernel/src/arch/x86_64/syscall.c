@@ -51,7 +51,7 @@ void syscall_handler_c(struct syscall_frame *frame) {
   }
 }
 
-void initSyscalls(void) {
+void init_syscalls(void) {
 
   // Enable syscall extension bit
   uint64_t efer = rdmsr(MSR_EFER);

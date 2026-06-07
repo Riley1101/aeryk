@@ -28,7 +28,7 @@ typedef struct process {
   void (*entrypoint)();
 } process_t;
 
-void initScheduler(void);
+void init_scheduler(void);
 
 process_t *create_kernel_thread(void (*entry_point)());
 

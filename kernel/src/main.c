@@ -68,8 +68,8 @@ void test_user_program() {
 
 // Main kernel entry point
 void kmain(void) {
-  initGdt();
-  initIdt();
+  init_gdt();
+  init_idt();
 
   if (LIMINE_BASE_REVISION_SUPPORTED(limine_base_revision) == false) {
     hcf();
@@ -98,7 +98,7 @@ void kmain(void) {
   struct PSF1_FONT psf_font;
   struct PSF1_FONT *psf = &psf_font;
 
-  loadPSF1("cp850-8x16.psf", psf,
+  load_psf1("cp850-8x16.psf", psf,
            (struct limine_module_response *)module_request.response);
 
   // Initialize the screen FIRST
@@ -106,14 +106,14 @@ void kmain(void) {
 
   // init_serial();
 
-  initPMM();
+  init_pmm();
 
   print("[0] PMM Initialized\n");
 
-  initVMM();
+  init_vmm();
   print("[1] VMM Initialized.\n");
 
-  initAPIC();
+  init_apic();
 
   // Route irq 1 to idt 33
   ioapic_set_irq(1, 0, 33);
@@ -126,14 +126,14 @@ void kmain(void) {
     print("[!] ERROR: APIC failed to enable.\n");
   }
 
-  initTimer();
+  init_timer();
 
   print("[3] IRQ0 PIT Timer calibration started.\n");
 
   print("[4] Slab Allocator kmalloc online.\n");
-  initSlab();
+  init_slab();
 
-  initScheduler();
+  init_scheduler();
 
   print("[5] Running slab test with dynamic kmalloc.\n");
 
@@ -145,13 +145,13 @@ void kmain(void) {
     print("[-] kfree released slab chunk cleanly.\n");
   }
 
-  initKeyboard();
+  init_keyboard();
 
   print("[6] IRQ1 keyboard listening...\n");
 
   asm volatile("sti");
 
-  initSyscalls();
+  init_syscalls();
 
   print("[7] Syscalls initialized...\n");
 

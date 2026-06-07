@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-static bool checkStringEndsWith(const char *str, const char *end)
+static bool check_string_ends_with(const char *str, const char *end)
 {
     const char *_str = str;
     const char *_end = end;
@@ -35,21 +35,21 @@ static bool checkStringEndsWith(const char *str, const char *end)
     return true;
 }
 
-static struct limine_file *getFile(const char *name, struct limine_module_response *module_response)
+static struct limine_file *get_file(const char *name, struct limine_module_response *module_response)
 {
     for (size_t i = 0; i < module_response->module_count; i++)
     {
         struct limine_file *f = module_response->modules[i];
-        if (checkStringEndsWith(f->path, name))
+        if (check_string_ends_with(f->path, name))
             return f;
     }
 
     return NULL;
 }
 
-void loadPSF1(const char *name, struct PSF1_FONT *font, struct limine_module_response *modules)
+void load_psf1(const char *name, struct PSF1_FONT *font, struct limine_module_response *modules)
 {
-    struct limine_file *file = getFile(name, modules);
+    struct limine_file *file = get_file(name, modules);
 
     if (file == NULL)
         return;

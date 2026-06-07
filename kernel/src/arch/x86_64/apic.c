@@ -30,7 +30,7 @@ void ioapic_set_irq(uint8_t irq, uint64_t apic_id, uint8_t vector) {
   ioapic_write(high_index, apic_id << 24);
 }
 
-void initAPIC() {
+void init_apic() {
   vmm_map_page(vmm_get_kernel_pml4(), LAPIC_BASE + hhdm_offset, LAPIC_BASE,
                PTE_PRESENT | PTE_WRITABLE);
 

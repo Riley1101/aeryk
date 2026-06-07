@@ -22,7 +22,7 @@ static bool bitmap_test(size_t bit) {
 extern volatile struct limine_memmap_request memmap_request;
 extern volatile struct limine_hhdm_request hhdm_request;
 
-void initPMM(void) {
+void init_pmm(void) {
   if (!memmap_request.response || !hhdm_request.response) {
     print("PANIC: Missing limine memory map or HHDM!\n");
     for (;;)

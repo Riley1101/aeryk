@@ -8,37 +8,37 @@ struct tss_entry_struct tss_entry;
 struct gdt_ptr_struct gdt_ptr;
 
 // @see https://wiki.osdev.org/GDT_Tutorial
-void initGdt()
+void init_gdt()
 {
     gdt_ptr.limit = (sizeof(struct gdt_entry_struct) * GDT_SIZE) - 1;
     gdt_ptr.base = (uint64_t)&gdt_entries;
 
-    setGdtGate(0, 0, 0, 0x00, 0x00); // Null descriptor
+    set_gdt_gate(0, 0, 0, 0x00, 0x00); // Null descriptor
 
-    setGdtGate(1, 0, 0xFFFFFFFF, 0x9A, 0xAF); // Kernel Code (64-bit, L bit set)
-    setGdtGate(2, 0, 0xFFFFFFFF, 0x92, 0xCF); // Kernel Data
+    set_gdt_gate(1, 0, 0xFFFFFFFF, 0x9A, 0xAF); // Kernel Code (64-bit, L bit set)
+    set_gdt_gate(2, 0, 0xFFFFFFFF, 0x92, 0xCF); // Kernel Data
 
     /**
      * AMD found a performance tweak to get the user space without going through GDT, by just reording UserData above User Code
      * For SYSRET
      */
-    setGdtGate(3, 0, 0xFFFFFFFF, 0xF2, 0xCF); // User Data (DPL=3)
+    set_gdt_gate(3, 0, 0xFFFFFFFF, 0xF2, 0xCF); // User Data (DPL=3)
 
-    setGdtGate(4, 0, 0xFFFFFFFF, 0xFA, 0xAF); // User Code (64-bit, DPL=3)
+    set_gdt_gate(4, 0, 0xFFFFFFFF, 0xFA, 0xAF); // User Code (64-bit, DPL=3)
 
-    writeTSS(5, 0x0);
+    write_tss(5, 0x0);
     gdt_flush(&gdt_ptr);
 
     tss_flush();
 }
 
-void writeTSS(uint32_t num, uint64_t rsp0)
+void write_tss(uint32_t num, uint64_t rsp0)
 {
     uint64_t base = (uint64_t)&tss_entry;
     uint32_t limit = sizeof(struct tss_entry_struct) - 1;
 
     // Lower 32 bits of base via the standard 8-byte descriptor slot
-    setGdtGate(num, (uint32_t)(base & 0xFFFFFFFF), limit, 0x89, 0x00);
+    set_gdt_gate(num, (uint32_t)(base & 0xFFFFFFFF), limit, 0x89, 0x00);
 
     // Upper 32 bits of base go in the next slot (64-bit system descriptors are 16 bytes)
     gdt_entries[num + 1].limit_low = (base >> 32) & 0xFFFF;
@@ -58,7 +58,7 @@ void set_kernel_stack(uint64_t rsp0)
     tss_entry.rsp0 = rsp0;
 }
 
-void setGdtGate(uint32_t num, uint32_t base, uint32_t limit, uint8_t access, uint8_t gran)
+void set_gdt_gate(uint32_t num, uint32_t base, uint32_t limit, uint8_t access, uint8_t gran)
 {
     gdt_entries[num].base_low = (base & 0xFFFF);
     gdt_entries[num].base_middle = (base >> 16) & 0xFF;

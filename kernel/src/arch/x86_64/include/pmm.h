@@ -7,7 +7,7 @@
 
 extern uint64_t hhdm_offset;
 
-void initPMM(void);
+void init_pmm(void);
 void *pmm_alloc_page(void);
 void pmm_free_page(void *page);
 

@@ -35,7 +35,7 @@ static void list_add(struct slab **head, struct slab *s) {
   *head = s;
 }
 
-void initSlab(void) {
+void init_slab(void) {
   for (int i = 0; i < NUM_CACHES; i++) {
     kmalloc_caches[i].object_size = cache_sizes[i];
     kmalloc_caches[i].slabs_partial = NULL;

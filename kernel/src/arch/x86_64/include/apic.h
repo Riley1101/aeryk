@@ -16,7 +16,7 @@
 #define LAPIC_TIMER_CURCNT 0x390
 #define LAPIC_TIMER_DIV 0x3E0
 
-void initAPIC(void);
+void init_apic(void);
 void lapic_write(uint32_t reg, uint32_t value);
 uint32_t lapic_read(uint32_t reg);
 void lapic_eoi(void);

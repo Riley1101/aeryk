@@ -11,6 +11,6 @@ extern uint64_t kernel_rsp_scratch;
 
 extern void syscall_entry(void);
 
-void initSyscalls(void);
+void init_syscalls(void);
 
 #endif // !SYSCALL_H

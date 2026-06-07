@@ -32,8 +32,8 @@ struct interrupt_frame
 
 typedef void (*irq_handler_t)(struct interrupt_frame *frame);
 
-void initIdt();
-void setIdtGate(uint32_t num, uint64_t handler, uint16_t set, uint8_t ist, uint8_t type_attributes);
+void init_idt();
+void set_idt_gate(uint32_t num, uint64_t handler, uint16_t set, uint8_t ist, uint8_t type_attributes);
 void isr_handler(struct interrupt_frame *frame);
 void irq_install_handler(int irq, irq_handler_t handler);
 void irq_uninstall_handler(int irq);

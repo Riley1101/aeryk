@@ -52,7 +52,7 @@ void vmm_map_page(uint64_t *pml4, uint64_t virtual_addr, uint64_t physical_addr,
 
 uint64_t *vmm_get_kernel_pml4(void) { return kernel_pml4; }
 
-void initVMM(void) {
+void init_vmm(void) {
   uint64_t cr3;
   asm volatile("mov %%cr3, %0" : "=r"(cr3));
 

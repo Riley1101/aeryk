@@ -16,7 +16,7 @@ typedef struct {
 static queue_t mlfq[NUM_QUEUES];
 static uint32_t global_ticks = 0;
 
-void mlfqInit() {
+void mlfq_init() {
   uint32_t current_quantum = 2;
   for (int i = 0; i < NUM_QUEUES; i++) {
     mlfq[i].head = NULL;
@@ -26,7 +26,7 @@ void mlfqInit() {
   }
 }
 
-void mlfqEnqueue(process_t *proc) {
+void mlfq_enqueue(process_t *proc) {
   if (!proc || proc->state == PROCESS_DEAD) {
     return;
   }
@@ -46,7 +46,7 @@ void mlfqEnqueue(process_t *proc) {
   }
 }
 
-process_t *mlfqPickNext(void) {
+process_t *mlfq_pick_next(void) {
   for (int i = 0; i < NUM_QUEUES; i++) {
     if (mlfq[i].head) {
       process_t *next_proc = mlfq[i].head;
@@ -66,7 +66,7 @@ process_t *mlfqPickNext(void) {
   return NULL;
 }
 
-static void mlfqBoostAll(void) {
+static void mlfq_boost_all(void) {
   for (int i = 1; i < NUM_QUEUES; i++) {
     queue_t *q = &mlfq[i];
     while (q->head) {
@@ -75,17 +75,17 @@ static void mlfqBoostAll(void) {
 
       proc->priority = 0;
       proc->ticks_executed = 0;
-      mlfqEnqueue(proc);
+      mlfq_enqueue(proc);
     }
     q->tail = NULL;
   }
 }
 
-void mlfqOnTick(void) {
+void mlfq_on_tick(void) {
   global_ticks++;
   if (global_ticks >= PRIORITY_BOOST_INTERVAL) {
     global_ticks = 0;
-    mlfqBoostAll();
+    mlfq_boost_all();
     if (current_process && current_process != idle_process) {
       current_process->priority = 0;
       current_process->ticks_executed = 0;

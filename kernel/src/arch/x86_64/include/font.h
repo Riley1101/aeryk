@@ -16,6 +16,6 @@ struct PSF1_FONT
     void *glyph_buffer;
 };
 
-void loadPSF1(const char *name, struct PSF1_FONT *font, struct limine_module_response *modules);
+void load_psf1(const char *name, struct PSF1_FONT *font, struct limine_module_response *modules);
 
 #endif // FONT_H

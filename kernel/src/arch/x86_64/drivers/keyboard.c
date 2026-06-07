@@ -86,7 +86,7 @@ static process_t *kbd_wait_dequeue(void) {
   return p;
 }
 
-void onIrq1(struct interrupt_frame *frame) {
+void on_irq1(struct interrupt_frame *frame) {
   (void)frame;
 
   uint8_t scancode = in_portb(PS2DATA_PORT);
@@ -101,7 +101,7 @@ void onIrq1(struct interrupt_frame *frame) {
 
       process_t *waiter = kbd_wait_dequeue();
       if (waiter) {
-        mlfqEnqueue(waiter); // sets state back to PROCESS_READY
+        mlfq_enqueue(waiter); // sets state back to PROCESS_READY
       }
     }
   }
@@ -130,7 +130,7 @@ int keyboard_read(char *buf, int count) {
     }
 
     // Nothing buffered: register as a waiter and yield. cli/sti around the
-    // empty-check + enqueue close the race against onIrq1 firing in between
+    // empty-check + enqueue close the race against on_irq1 firing in between
     // (a wakeup there just re-readies us before schedule() switches away).
     current_process->state = PROCESS_BLOCKED;
     kbd_wait_enqueue(current_process);
@@ -141,7 +141,7 @@ int keyboard_read(char *buf, int count) {
   return n;
 }
 
-void initKeyboard() {
+void init_keyboard() {
   // Read current i8042 command byte
   ps2_wait_write();
   out_portb(PS2CMD_PORT, 0x20);
@@ -157,5 +157,5 @@ void initKeyboard() {
   ps2_wait_write();
   out_portb(PS2DATA_PORT, cmd);
 
-  irq_install_handler(1, onIrq1);
+  irq_install_handler(1, on_irq1);
 }

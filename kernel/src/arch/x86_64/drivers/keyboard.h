@@ -1,7 +1,7 @@
 #ifndef KEYBOARD_H
 #define KEYBOARD_H
 
-void initKeyboard(void);
+void init_keyboard(void);
 
 // Reads up to `count` bytes from the keyboard into `buf`, blocking the
 // calling process until at least one byte is available. Stops early on '\n'.
