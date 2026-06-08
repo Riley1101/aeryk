@@ -172,22 +172,21 @@ override SRCFILES := $(shell find -L src cc-runtime/src -type f -not -path 'src/
 # Add architecture specific files, if they exist.
 override SRCFILES += $(shell find -L src/arch/$(ARCH) -type f 2>/dev/null | LC_ALL=C sort)
 
-LIBC_DIR := ../libc
-override CFLAGS += -I$(LIBC_DIR)/include
 # Obtain the object and header dependencies file names.
 override CFILES := $(filter %.c,$(SRCFILES))
 override ASFILES := $(filter %.S,$(SRCFILES))
+
 ifeq ($(ARCH),x86_64)
-override NASMFILES := $(filter %.asm,$(SRCFILES))
+# crt0.asm is libc/Ring-3 startup code: it must NOT be linked into the
+# kernel itself, only into user-mode program executables (via the ELF
+# loader's userland build).
+override NASMFILES := $(filter-out %/crt0.asm,$(filter %.asm,$(SRCFILES)))
 endif
-LIBC_CFILES := $(filter %.c,$(shell find -L $(LIBC_DIR) -type f 2>/dev/null | LC_ALL=C sort))
-LIBC_OBJ := $(addprefix obj-$(ARCH)/libc/,$(patsubst $(LIBC_DIR)/%,%,$(LIBC_CFILES:.c=.c.o)))
-LIBC_HEADER_DEPS := $(addprefix obj-$(ARCH)/libc/,$(patsubst $(LIBC_DIR)/%,%,$(LIBC_CFILES:.c=.c.d)))
-override OBJ := $(addprefix obj-$(ARCH)/,$(CFILES:.c=.c.o) $(ASFILES:.S=.S.o)) $(LIBC_OBJ)
+override OBJ := $(addprefix obj-$(ARCH)/,$(CFILES:.c=.c.o) $(ASFILES:.S=.S.o))
 ifeq ($(ARCH),x86_64)
 override OBJ += $(addprefix obj-$(ARCH)/,$(NASMFILES:.asm=.asm.o))
 endif
-override HEADER_DEPS := $(addprefix obj-$(ARCH)/,$(CFILES:.c=.c.d) $(ASFILES:.S=.S.d)) $(LIBC_HEADER_DEPS)
+override HEADER_DEPS := $(addprefix obj-$(ARCH)/,$(CFILES:.c=.c.d) $(ASFILES:.S=.S.d))
 
 # Default target. This must come first, before header dependencies.
 .PHONY: all
@@ -203,11 +202,6 @@ bin-$(ARCH)/$(OUTPUT): GNUmakefile linker-scripts/$(ARCH).lds $(OBJ)
 
 # Compilation rules for *.c files.
 obj-$(ARCH)/%.c.o: %.c GNUmakefile
-	mkdir -p "$(dir $@)"
-	$(CC) $(CFLAGS) $(CPPFLAGS) -c $< -o $@
-
-# Compilation rules for libc *.c files.
-obj-$(ARCH)/libc/%.c.o: $(LIBC_DIR)/%.c GNUmakefile
 	mkdir -p "$(dir $@)"
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c $< -o $@
 

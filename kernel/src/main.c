@@ -105,6 +105,7 @@ void kmain(void) {
   init_renderer(global_renderer, &f, psf);
 
   // init_serial();
+  init_serial();
 
   init_pmm();
 
@@ -156,12 +157,13 @@ void kmain(void) {
   print("[7] Syscalls initialized...\n");
 
   void *user_stack = pmm_alloc_page();
+
   uint64_t user_stack_top = (uint64_t)user_stack + hhdm_offset + PAGE_SIZE;
 
   void *kernel_stack = pmm_alloc_page();
   kernel_rsp_scratch = (uint64_t)kernel_stack + hhdm_offset + PAGE_SIZE;
 
-  print("[-] Jumping into Ring 3");
+  print("[-] Jumping into Ring 3... \n");
 
   // Know that this will result in a seg fault, because test_user_program currently
   // lives in kernel space. we have to support syswrite to and sysexit

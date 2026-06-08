@@ -31,13 +31,15 @@ A x86_64 kernel written in C, booted via the [Limine](https://codeberg.org/Limin
 - [x] Scheduler / processes MLFQ
 - [x] Serial driver (not complete one, just for debugging instructions to GDB)
 - [x] Syscall interface
-  -  [ ] sys_write and sys_exit
-  -  [ ] Context switching with MLFQ 
-  -  [ ] libc wrapper for syscalls
+  -  [x] sys_write and sys_exit
+  -  [x] Context switching with MLFQ 
 - [ ] Initramfs 
-- [ ] Elf loader 
-- [ ] Compositor
 - [ ] Filesystem (VFS)
+- [ ] Elf loader 
+- [ ] libc wrapper for syscalls
+    -  [ ] Some fun libc Programs
+- [ ] Input and IPC
+- [ ] Compositor
 
 ## Build
 

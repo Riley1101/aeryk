@@ -1,6 +1,4 @@
-#include <stdio.h>
 #include <stdbool.h>
+#include <stdio.h>
 
-bool putchar(int ic){
-    return ic;
-}
+bool putchar(int ic) { return ic; }
