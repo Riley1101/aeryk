@@ -1,5 +1,6 @@
 #include "arch/x86_64/drivers/keyboard.h"
 #include "arch/x86_64/drivers/serial.h"
+#include "arch/x86_64/fs/initramfs.h"
 #include "limine.h"
 #include "process.h"
 #include "syscall.h"
@@ -12,6 +13,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 #include <timer.h>
 #include <tty.h>
 #include <vmm.h>
@@ -99,7 +101,7 @@ void kmain(void) {
   struct PSF1_FONT *psf = &psf_font;
 
   load_psf1("cp850-8x16.psf", psf,
-           (struct limine_module_response *)module_request.response);
+            (struct limine_module_response *)module_request.response);
 
   // Initialize the screen FIRST
   init_renderer(global_renderer, &f, psf);
@@ -146,6 +148,20 @@ void kmain(void) {
     print("[-] kfree released slab chunk cleanly.\n");
   }
 
+  if (module_request.response != NULL) {
+    const char *suffix = "initramfs.cpio";
+    size_t slen = 14;
+    for (size_t i = 0; i < module_request.response->module_count; i++) {
+      struct limine_file *mod = module_request.response->modules[i];
+      size_t plen = strlen(mod->path);
+      if (plen >= slen && memcmp(mod->path + plen - slen, suffix, slen) == 0) {
+        print("[5b] Parsing initramfs...\n");
+        initramfs_init(mod->address, mod->size);
+        break;
+      }
+    }
+  }
+
   init_keyboard();
 
   print("[6] IRQ1 keyboard listening...\n");
@@ -165,8 +181,8 @@ void kmain(void) {
 
   print("[-] Jumping into Ring 3... \n");
 
-  // Know that this will result in a seg fault, because test_user_program currently
-  // lives in kernel space. we have to support syswrite to and sysexit
+  // Know that this will result in a seg fault, because test_user_program
+  // currently lives in kernel space. we have to support syswrite to and sysexit
   // enter_usermode((uint64_t)test_user_program, user_stack_top);
 
   hcf();
