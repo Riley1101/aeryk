@@ -1,7 +1,17 @@
 #ifndef PROCESS_H
 #define PROCESS_H
 
+#include <arch/x86_64/fs/vfs.h>
 #include <stdint.h>
+
+#define MAX_FDS 32
+
+typedef struct file_descriptor {
+  vfs_node_t *node;
+  uint32_t offset;
+  int flags;
+} file_descriptor_t;
+;
 
 typedef enum {
   PROCESS_READY,
@@ -26,6 +36,7 @@ typedef struct process {
   struct process *prev;
 
   void (*entrypoint)();
+  file_descriptor_t fd_table[MAX_FDS];
 } process_t;
 
 void init_scheduler(void);

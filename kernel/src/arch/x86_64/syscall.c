@@ -1,3 +1,6 @@
+#include "arch/x86_64/fs/vfs.h"
+#include <stddef.h>
+#include <string.h>
 #include <utils.h>
 
 #include <arch/x86_64/drivers/keyboard.h>
@@ -20,6 +23,24 @@ void syscall_handler_c(struct syscall_frame *frame) {
   case 0: // sys_read
     if (frame->rdi == 0) {
       frame->rax = keyboard_read((char *)frame->rsi, (int)frame->rdx);
+
+    } else if (frame->rdi >= 3 && frame->rdi < MAX_FDS) {
+      // reading from a file
+      file_descriptor_t *fd = &current_process->fd_table[frame->rdi];
+      if (fd->node && fd->node->type == VFS_FILE) {
+        uint32_t bytes_to_read = frame->rdx;
+        if (fd->offset + bytes_to_read > fd->node->size) {
+          bytes_to_read = fd->node->size - fd->offset;
+        }
+        if (bytes_to_read > 0) {
+          int _ = memcmp((void *)frame->rsi,
+                         (uint8_t *)fd->node->data + fd->offset, bytes_to_read);
+          fd->offset += bytes_to_read;
+        }
+        frame->rax = bytes_to_read;
+      } else {
+        frame->rax = -1;
+      }
     } else {
       frame->rax = -1;
     }
@@ -30,6 +51,40 @@ void syscall_handler_c(struct syscall_frame *frame) {
       print((const char *)frame->rsi);
     }
     frame->rax = frame->rdx;
+    break;
+    // sys_read
+  case 2: {
+    const char *filename = (const char *)frame->rdi;
+    vfs_node_t *file = vfs_find_node(vfs_root, filename);
+    if (!file || file->type != VFS_FILE) {
+      frame->rax = -1; // file not found
+      break;
+    }
+
+    int fd_index = -1;
+    // starts at 3 because 0,1,2 for stdio
+    for (int i = 3; i < MAX_FDS; i++) {
+      if (current_process->fd_table[i].node == NULL) {
+        fd_index = i;
+        break;
+      }
+    }
+
+    if (fd_index != -1) {
+      current_process->fd_table[fd_index].node = file;
+      current_process->fd_table[fd_index].offset = 0;
+      current_process->fd_table[fd_index].flags = frame->rsi;
+    } else {
+      frame->rax = -1;
+    }
+  }
+  case 3:
+    if (frame->rdi >= 3 && frame->rdi < MAX_FDS) {
+      current_process->fd_table[frame->rdi].node = NULL;
+      frame->rax = 0;
+    } else {
+      frame->rax = -1;
+    }
     break;
   case 60: // sys_exit
     print("\n[Syscall] Process exited.\n");
