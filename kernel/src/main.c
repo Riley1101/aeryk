@@ -56,16 +56,33 @@ static void hcf(void) {
   }
 }
 
-// A simple user-mode program to test
 void test_user_program() {
-  const char *msg = "Hello from Ring 3 via SYSCALL!\n";
-  asm volatile("mov $1, %%rax \n" // sys_write
-               "mov %0, %%rdi \n" // arg0 = msg
-               "syscall \n"
-               "1: jmp 1b" // Infinite loop after syscall
-               :
-               : "r"(msg)
-               : "rax", "rdi", "rcx", "r11");
+    const char *filepath = "/hello.txt";
+    char buffer[128];
+
+    // sys_open
+    long fd;
+    asm volatile("mov $2, %%rax \n" "mov %1, %%rdi \n" "syscall \n" : "=a"(fd) : "r"(filepath) : "rdi", "rcx", "r11");
+
+    if (fd >= 0) {
+        // sys_read
+        long bytes_read;
+        asm volatile("mov $0, %%rax \n" "mov %1, %%rdi \n" "mov %2, %%rsi \n" "mov $128, %%rdx \n" "syscall \n"
+            : "=a"(bytes_read) : "r"(fd), "r"(buffer) : "rdi", "rsi", "rdx", "rcx", "r11");
+
+        // sys_write to stdout (1)
+        if (bytes_read > 0) {
+            asm volatile("mov $1, %%rax \n" "mov $1, %%rdi \n" "mov %0, %%rsi \n" "mov %1, %%rdx \n" "syscall \n"
+                : : "r"(buffer), "r"(bytes_read) : "rax", "rdi", "rsi", "rdx", "rcx", "r11");
+        }
+    }
+
+    const char *log = "LOG";
+asm volatile("mov $1, %%rax \n" "mov $1, %%rdi \n" "mov %0, %%rsi \n" "mov $3, %%rdx \n" "syscall \n"
+    : : "r"(log) : "rax", "rdi", "rsi", "rdx", "rcx", "r11");
+
+    // sys_exit
+    asm volatile("mov $60, %%rax \n" "syscall \n" : : : "rax", "rcx", "r11");
 }
 
 // Main kernel entry point
@@ -181,9 +198,19 @@ void kmain(void) {
 
   print("[-] Jumping into Ring 3... \n");
 
-  // Know that this will result in a seg fault, because test_user_program
-  // currently lives in kernel space. we have to support syswrite to and sysexit
-  // enter_usermode((uint64_t)test_user_program, user_stack_top);
+  // test_user_program still lives in kernel .text and the user stack
+  // is backed by an HHDM page; both were mapped supervisor-only by
+  // Limine. Mark the pages ring-3 can touch as user-accessible so the
+  // iret to CPL3 doesn't immediately #PF on fetch/stack access.
+  uint64_t *pml4 = vmm_get_kernel_pml4();
+  uint64_t func_addr = (uint64_t)test_user_program;
+  for (uint64_t addr = func_addr & ~(uint64_t)(PAGE_SIZE - 1);
+       addr < func_addr + 0x2000; addr += PAGE_SIZE) {
+    vmm_set_page_user(pml4, addr);
+  }
+  vmm_set_page_user(pml4, (uint64_t)user_stack + hhdm_offset);
+
+  enter_usermode((uint64_t)test_user_program, user_stack_top);
 
   hcf();
 }

@@ -74,9 +74,11 @@ void syscall_handler_c(struct syscall_frame *frame) {
       current_process->fd_table[fd_index].node = file;
       current_process->fd_table[fd_index].offset = 0;
       current_process->fd_table[fd_index].flags = frame->rsi;
+      frame->rax = fd_index;
     } else {
       frame->rax = -1;
     }
+    break;
   }
   case 3:
     if (frame->rdi >= 3 && frame->rdi < MAX_FDS) {
