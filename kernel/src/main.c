@@ -155,7 +155,7 @@ void kmain(void) {
       struct limine_file *mod = module_request.response->modules[i];
       size_t plen = strlen(mod->path);
       if (plen >= slen && memcmp(mod->path + plen - slen, suffix, slen) == 0) {
-        print("[5b] Parsing initramfs...\n");
+        print("[5] Parsing initramfs...\n");
         initramfs_init(mod->address, mod->size);
         break;
       }

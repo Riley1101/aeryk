@@ -33,8 +33,8 @@ A x86_64 kernel written in C, booted via the [Limine](https://codeberg.org/Limin
 - [x] Syscall interface
   -  [x] sys_write and sys_exit
   -  [x] Context switching with MLFQ 
-- [ ] Initramfs 
-- [ ] Filesystem (VFS)
+- [x] Initramfs 
+- [x] Filesystem (VFS)
 - [ ] Elf loader 
 - [ ] libc wrapper for syscalls
     -  [ ] Some fun libc Programs
