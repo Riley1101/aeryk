@@ -10,6 +10,7 @@
 void init_vmm(void);
 void vmm_map_page(uint64_t *pml4, uint64_t virtual_addr, uint64_t physical_addr,
                   uint64_t flags);
+void vmm_set_page_user(uint64_t *pml4, uint64_t virtual_addr);
 uint64_t *vmm_get_kernel_pml4(void);
 
 #endif /* ifndef VMM_H */

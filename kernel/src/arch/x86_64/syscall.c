@@ -33,8 +33,8 @@ void syscall_handler_c(struct syscall_frame *frame) {
           bytes_to_read = fd->node->size - fd->offset;
         }
         if (bytes_to_read > 0) {
-          int _ = memcmp((void *)frame->rsi,
-                         (uint8_t *)fd->node->data + fd->offset, bytes_to_read);
+          memcpy((void *)frame->rsi,
+                 (uint8_t *)fd->node->data + fd->offset, bytes_to_read);
           fd->offset += bytes_to_read;
         }
         frame->rax = bytes_to_read;
