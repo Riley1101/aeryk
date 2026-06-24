@@ -50,7 +50,7 @@ syscall_entry:
   mov r11, [rsp + 8] ; user RFLAGS
   mov rsp, [rsp] ; user RSP
 
-  sysretq
+  o64 sysret
 
 
 

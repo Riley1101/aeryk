@@ -16,6 +16,17 @@ HOST_CPPFLAGS :=
 HOST_LDFLAGS :=
 HOST_LIBS :=
 
+# Toolchain for building userland (ring 3) programs. Honors the same
+# TOOLCHAIN_PREFIX used for the kernel (e.g. TOOLCHAIN_PREFIX=x86_64-elf-).
+USER_CC := $(TOOLCHAIN_PREFIX)gcc
+USER_LD := $(TOOLCHAIN_PREFIX)ld
+
+override USERLAND_CFLAGS := -g -O2 -pipe \
+    -m64 -march=x86-64 -mabi=sysv \
+    -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone \
+    -ffreestanding -fno-stack-protector -fno-pic -fno-pie \
+    -Ikernel/freestnd-c-hdrs/include
+
 .PHONY: all
 all: $(IMAGE_NAME).iso
 
@@ -154,9 +165,18 @@ limine/limine:
 kernel/.deps-obtained:
 	./kernel/get-deps
 
-initramfs.cpio:
-	mkdir -p initramfs_root
+userland/init.elf: userland/init.c userland/linker.lds kernel/src/arch/x86_64/crt0.asm libc/stdlib/exit.c
+	mkdir -p obj-userland
+	nasm -f elf64 kernel/src/arch/x86_64/crt0.asm -o obj-userland/crt0.asm.o
+	$(USER_CC) $(USERLAND_CFLAGS) -c userland/init.c -o obj-userland/init.c.o
+	$(USER_CC) $(USERLAND_CFLAGS) -c libc/stdlib/exit.c -o obj-userland/exit.c.o
+	$(USER_LD) -nostdlib -static -m elf_x86_64 -T userland/linker.lds \
+		obj-userland/crt0.asm.o obj-userland/init.c.o obj-userland/exit.c.o -o userland/init.elf
+
+initramfs.cpio: userland/init.elf
+	mkdir -p initramfs_root/bin
 	echo "Hello from the aeryk cpio initramfs!" > initramfs_root/hello.txt
+	cp -v userland/init.elf initramfs_root/bin/init
 	cd initramfs_root && find . | cpio -o -H newc > ../initramfs.cpio
 
 .PHONY: kernel
@@ -263,7 +283,8 @@ test: unity/src/unity.c
 .PHONY: clean
 clean:
 	$(MAKE) -C kernel clean
-	rm -rf iso_root $(IMAGE_NAME).iso $(IMAGE_NAME).hdd tests/bin
+	rm -rf iso_root $(IMAGE_NAME).iso $(IMAGE_NAME).hdd tests/bin \
+		obj-userland userland/init.elf initramfs_root/bin initramfs.cpio
 
 .PHONY: distclean
 distclean:

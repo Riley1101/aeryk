@@ -35,7 +35,7 @@ A x86_64 kernel written in C, booted via the [Limine](https://codeberg.org/Limin
   -  [x] Context switching with MLFQ 
 - [x] Initramfs 
 - [x] Filesystem (VFS)
-- [ ] Elf loader 
+- [x] Elf loader 
 - [ ] libc wrapper for syscalls
     -  [ ] Some fun libc Programs
 - [ ] Input and IPC

@@ -4,9 +4,11 @@
 #include "slab.h"
 #include "syscall.h"
 #include "vmm.h"
+#include <elf.h>
 #include <process.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 extern void switch_task(process_t *prev, process_t *next);
 
@@ -30,6 +32,26 @@ static void kernel_thread_stub(void) {
     entrypoint();
   }
   kernel_thread_exit();
+}
+
+static void user_thread_stub(void) {
+  __asm__ volatile("sti");
+  enter_usermode(current_process->entry, current_process->user_stack_top);
+  // enter_usermode never returns (iretq into ring 3).
+  kernel_thread_exit();
+}
+
+static void enqueue_process(process_t *proc) {
+  if (!process_queue) {
+    process_queue = proc;
+    proc->next = proc;
+    proc->prev = proc;
+  } else {
+    proc->prev = process_queue->prev;
+    proc->next = process_queue;
+    process_queue->prev->next = proc;
+    process_queue->prev = proc;
+  }
 }
 
 void init_scheduler() {
@@ -84,16 +106,73 @@ process_t *create_kernel_thread(void (*entrypoint)()) {
   proc->rsp = (uint64_t)stack;
   proc->cr3 = (uint64_t)vmm_get_kernel_pml4() - hhdm_offset;
 
-  if (!process_queue) {
-    process_queue = proc;
-    proc->next = proc;
-    proc->prev = proc;
-  } else {
-    proc->prev = process_queue->prev;
-    proc->next = process_queue;
-    process_queue->prev->next = proc;
-    process_queue->prev = proc;
+  enqueue_process(proc);
+
+  proc->priority = 0;
+  proc->ticks_executed = 0;
+  mlfq_enqueue(proc);
+  return proc;
+}
+
+#define USER_STACK_TOP 0x0000700000000000ULL
+
+process_t *create_user_process(const char *path) {
+  vfs_node_t *file = vfs_find_node(vfs_root, path);
+  if (!file || file->type != VFS_FILE) {
+    return NULL;
   }
+
+  uint64_t *pml4 = vmm_new_user_pagetable();
+  if (!pml4) {
+    return NULL;
+  }
+
+  uint64_t entry;
+  if (elf_load(file, pml4, &entry) != 0) {
+    return NULL;
+  }
+
+  void *user_stack_phys = pmm_alloc_page();
+  if (!user_stack_phys) {
+    return NULL;
+  }
+  vmm_map_page(pml4, USER_STACK_TOP - PAGE_SIZE, (uint64_t)user_stack_phys,
+               PTE_PRESENT | PTE_WRITABLE | PTE_USER | PTE_NX);
+
+  process_t *proc = (process_t *)kmalloc(sizeof(process_t));
+  if (!proc) {
+    return NULL;
+  }
+  memset(proc, 0, sizeof(process_t));
+
+  void *kernel_stack_phys = pmm_alloc_page();
+  if (!kernel_stack_phys) {
+    kfree(proc);
+    return NULL;
+  }
+  proc->kernel_stack = (void *)((uint64_t)kernel_stack_phys + hhdm_offset);
+
+  proc->pid = next_pid++;
+  proc->state = PROCESS_READY;
+  proc->entry = entry;
+  proc->user_stack_top = USER_STACK_TOP;
+  proc->cr3 = (uint64_t)pml4 - hhdm_offset;
+
+  uint64_t *stack = (uint64_t *)((uint64_t)proc->kernel_stack + PAGE_SIZE);
+
+  // when user_thread_stub returns (it shouldn't), land here instead of 0
+  *(--stack) = (uint64_t)user_thread_stub;
+  // callee-saved registers (rbx, rbp, r12-r15) zeroed for switch_task restore
+  *(--stack) = 0;
+  *(--stack) = 0;
+  *(--stack) = 0;
+  *(--stack) = 0;
+  *(--stack) = 0;
+  *(--stack) = 0;
+
+  proc->rsp = (uint64_t)stack;
+
+  enqueue_process(proc);
 
   proc->priority = 0;
   proc->ticks_executed = 0;

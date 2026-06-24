@@ -21,6 +21,10 @@ switch_task:
   ; next is in RSI
   mov rsp, [rsi + 8]
 
+  ; 3b. Switch address space to next->cr3 (offset 16 in process_t)
+  mov rax, [rsi + 16]
+  mov cr3, rax
+
   ; 4. Restore the callee-save register for the next thread
   pop r15
   pop r14
