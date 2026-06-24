@@ -56,13 +56,16 @@ vfs_node_t *vfs_find_node(vfs_node_t *parent, const char *path) {
   }
   size_t segment_len = next_slash - path;
 
+  // If this is the last segment (no trailing slash), recurse with
+  // next_slash itself so the '\0' base case matches the child without
+  // reading one byte past the end of the string.
+  const char *rest = (*next_slash == '/') ? next_slash + 1 : next_slash;
+
   vfs_node_t *child = parent->children;
   while (child) {
     if (strncmp_path(child->name, path, segment_len) == 0 &&
         child->name[segment_len] == '\0') {
-      return child;
-    } else {
-      return vfs_find_node(child, next_slash + 1);
+      return vfs_find_node(child, rest);
     }
     child = child->next;
   }
@@ -83,8 +86,7 @@ vfs_node_t *create_directories(const char *path) {
       break;
     }
     size_t len = next_slash - p;
-    int _copied = memcmp(buffer, p, len);
-
+    memcpy(buffer, p, len);
     buffer[len] = '\0';
 
     vfs_node_t *child = vfs_find_node(current, buffer);

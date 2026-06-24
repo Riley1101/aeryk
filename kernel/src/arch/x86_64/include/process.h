@@ -36,12 +36,23 @@ typedef struct process {
   struct process *prev;
 
   void (*entrypoint)();
+
+  // -- User process fields --
+  uint64_t entry;          // ELF entry point (ring 3)
+  uint64_t user_stack_top; // top of the user stack (ring 3)
+
   file_descriptor_t fd_table[MAX_FDS];
 } process_t;
 
 void init_scheduler(void);
 
 process_t *create_kernel_thread(void (*entry_point)());
+
+// Loads the ELF executable at `path` from the VFS into a fresh
+// per-process pagetable and queues it to run in ring 3.
+// Returns NULL if the file is missing, not a valid ELF64 executable,
+// or allocation fails.
+process_t *create_user_process(const char *path);
 
 extern process_t *current_process;
 extern process_t *idle_process;

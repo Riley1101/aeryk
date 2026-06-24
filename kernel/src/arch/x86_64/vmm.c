@@ -85,6 +85,24 @@ void vmm_set_page_user(uint64_t *pml4, uint64_t virtual_addr) {
 
 uint64_t *vmm_get_kernel_pml4(void) { return kernel_pml4; }
 
+uint64_t *vmm_new_user_pagetable(void) {
+  void *phys = pmm_alloc_page();
+  if (!phys) {
+    return NULL;
+  }
+
+  uint64_t *pml4 = (uint64_t *)((uint64_t)phys + hhdm_offset);
+  memset(pml4, 0, PAGE_SIZE);
+
+  // Share the kernel's higher-half mappings (entries 256-511) so kernel
+  // code/data and the HHDM remain accessible after a cr3 switch.
+  for (size_t i = 256; i < 512; i++) {
+    pml4[i] = kernel_pml4[i];
+  }
+
+  return pml4;
+}
+
 void init_vmm(void) {
   uint64_t cr3;
   asm volatile("mov %%cr3, %0" : "=r"(cr3));

@@ -47,6 +47,13 @@ void initramfs_init(void *base_address, size_t size) {
 
     uint64_t data_addr =
         ALIGN4(current_addr + sizeof(struct cpio_newc_header) + namesize);
+
+    // cpio entries from "find ." are prefixed with "./"; strip it so
+    // paths land at VFS root instead of under a literal "." directory.
+    if (filename[0] == '.' && filename[1] == '/') {
+      filename += 2;
+    }
+
     if (filename[0] != '.' || filename[1] != '\0') {
       vfs_node_t *parent_dir = create_directories(filename);
       const char *leaf_name = filename;
