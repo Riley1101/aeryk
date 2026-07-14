@@ -34,6 +34,11 @@ static void kernel_thread_stub(void) {
   kernel_thread_exit();
 }
 
+static void idle_thread(void) {
+  for (;;)
+    __asm__ volatile("sti; hlt");
+}
+
 static void user_thread_stub(void) {
   __asm__ volatile("sti");
   enter_usermode(current_process->entry, current_process->user_stack_top);
@@ -58,15 +63,35 @@ void init_scheduler() {
   mlfq_init();
 
   idle_process = (process_t *)kmalloc(sizeof(process_t));
+  memset(idle_process, 0, sizeof(process_t));
 
   idle_process->pid = 0;
   idle_process->state = PROCESS_RUNNING;
   idle_process->priority = 3;
   idle_process->ticks_executed = 0;
+  idle_process->entrypoint = idle_thread;
 
   // Make sure idle process know its pagetable
   idle_process->cr3 = (uint64_t)vmm_get_kernel_pml4() - hhdm_offset;
-  idle_process->kernel_stack = NULL;
+
+  void *idle_stack_phys = pmm_alloc_page();
+  idle_process->kernel_stack = (void *)((uint64_t)idle_stack_phys + hhdm_offset);
+
+  uint64_t *stack =
+      (uint64_t *)((uint64_t)idle_process->kernel_stack + PAGE_SIZE);
+
+  // when kernel_thread_stub returns (it shouldn't, idle_thread loops
+  // forever), land here instead of address 0
+  *(--stack) = (uint64_t)kernel_thread_stub;
+  // callee-saved registers (rbx, rbp, r12-r15) zeroed for switch_task restore
+  *(--stack) = 0;
+  *(--stack) = 0;
+  *(--stack) = 0;
+  *(--stack) = 0;
+  *(--stack) = 0;
+  *(--stack) = 0;
+
+  idle_process->rsp = (uint64_t)stack;
 
   current_process = idle_process;
 
