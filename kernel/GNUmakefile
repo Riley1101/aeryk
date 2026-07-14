@@ -84,6 +84,7 @@ override CPPFLAGS := \
     -I src \
     -I src/arch/$(ARCH)/include \
     -I limine-protocol/include \
+    -I ../libc/include \
     -isystem freestnd-c-hdrs/include \
     $(CPPFLAGS) \
     -MMD \

@@ -2,13 +2,14 @@
 #include "pmm.h"
 #include "scheduler.h"
 #include "slab.h"
-#include "syscall.h"
 #include "vmm.h"
 #include <elf.h>
 #include <process.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+
+#include <arch/x86_64/include/syscall.h>
 
 extern void switch_task(process_t *prev, process_t *next);
 
@@ -46,6 +47,25 @@ static void user_thread_stub(void) {
   kernel_thread_exit();
 }
 
+// Pushes the return stub and zeroed callee-saved registers (rbx, rbp,
+// r12-r15) that switch_task expects onto a fresh kernel stack, and returns
+// the resulting rsp. `stub` is where execution lands the first time this
+// process is switched to.
+static uint64_t setup_kernel_stack(void *kernel_stack_base,
+                                    void (*stub)(void)) {
+  uint64_t *stack = (uint64_t *)((uint64_t)kernel_stack_base + PAGE_SIZE);
+
+  *(--stack) = (uint64_t)stub;
+  *(--stack) = 0;
+  *(--stack) = 0;
+  *(--stack) = 0;
+  *(--stack) = 0;
+  *(--stack) = 0;
+  *(--stack) = 0;
+
+  return (uint64_t)stack;
+}
+
 static void enqueue_process(process_t *proc) {
   if (!process_queue) {
     process_queue = proc;
@@ -77,21 +97,10 @@ void init_scheduler() {
   void *idle_stack_phys = pmm_alloc_page();
   idle_process->kernel_stack = (void *)((uint64_t)idle_stack_phys + hhdm_offset);
 
-  uint64_t *stack =
-      (uint64_t *)((uint64_t)idle_process->kernel_stack + PAGE_SIZE);
-
   // when kernel_thread_stub returns (it shouldn't, idle_thread loops
   // forever), land here instead of address 0
-  *(--stack) = (uint64_t)kernel_thread_stub;
-  // callee-saved registers (rbx, rbp, r12-r15) zeroed for switch_task restore
-  *(--stack) = 0;
-  *(--stack) = 0;
-  *(--stack) = 0;
-  *(--stack) = 0;
-  *(--stack) = 0;
-  *(--stack) = 0;
-
-  idle_process->rsp = (uint64_t)stack;
+  idle_process->rsp =
+      setup_kernel_stack(idle_process->kernel_stack, kernel_thread_stub);
 
   current_process = idle_process;
 
@@ -116,19 +125,8 @@ process_t *create_kernel_thread(void (*entrypoint)()) {
   proc->state = PROCESS_READY;
   proc->entrypoint = entrypoint;
 
-  uint64_t *stack = (uint64_t *)((uint64_t)proc->kernel_stack + PAGE_SIZE);
-
   // when entrypoint returns, land here instead of address 0
-  *(--stack) = (uint64_t)kernel_thread_stub;
-  // callee-saved registers (rbx, rbp, r12-r15) zeroed for switch_task restore
-  *(--stack) = 0;
-  *(--stack) = 0;
-  *(--stack) = 0;
-  *(--stack) = 0;
-  *(--stack) = 0;
-  *(--stack) = 0;
-
-  proc->rsp = (uint64_t)stack;
+  proc->rsp = setup_kernel_stack(proc->kernel_stack, kernel_thread_stub);
   proc->cr3 = (uint64_t)vmm_get_kernel_pml4() - hhdm_offset;
 
   enqueue_process(proc);
@@ -154,11 +152,13 @@ process_t *create_user_process(const char *path) {
 
   uint64_t entry;
   if (elf_load(file, pml4, &entry) != 0) {
+    vmm_destroy_user_pagetable(pml4);
     return NULL;
   }
 
   void *user_stack_phys = pmm_alloc_page();
   if (!user_stack_phys) {
+    vmm_destroy_user_pagetable(pml4);
     return NULL;
   }
   vmm_map_page(pml4, USER_STACK_TOP - PAGE_SIZE, (uint64_t)user_stack_phys,
@@ -166,6 +166,7 @@ process_t *create_user_process(const char *path) {
 
   process_t *proc = (process_t *)kmalloc(sizeof(process_t));
   if (!proc) {
+    vmm_destroy_user_pagetable(pml4);
     return NULL;
   }
   memset(proc, 0, sizeof(process_t));
@@ -173,6 +174,7 @@ process_t *create_user_process(const char *path) {
   void *kernel_stack_phys = pmm_alloc_page();
   if (!kernel_stack_phys) {
     kfree(proc);
+    vmm_destroy_user_pagetable(pml4);
     return NULL;
   }
   proc->kernel_stack = (void *)((uint64_t)kernel_stack_phys + hhdm_offset);
@@ -183,19 +185,8 @@ process_t *create_user_process(const char *path) {
   proc->user_stack_top = USER_STACK_TOP;
   proc->cr3 = (uint64_t)pml4 - hhdm_offset;
 
-  uint64_t *stack = (uint64_t *)((uint64_t)proc->kernel_stack + PAGE_SIZE);
-
   // when user_thread_stub returns (it shouldn't), land here instead of 0
-  *(--stack) = (uint64_t)user_thread_stub;
-  // callee-saved registers (rbx, rbp, r12-r15) zeroed for switch_task restore
-  *(--stack) = 0;
-  *(--stack) = 0;
-  *(--stack) = 0;
-  *(--stack) = 0;
-  *(--stack) = 0;
-  *(--stack) = 0;
-
-  proc->rsp = (uint64_t)stack;
+  proc->rsp = setup_kernel_stack(proc->kernel_stack, user_thread_stub);
 
   enqueue_process(proc);
 
@@ -205,9 +196,60 @@ process_t *create_user_process(const char *path) {
   return proc;
 }
 
+// Frees process_t structs left in PROCESS_DEAD state (kernel_thread_exit
+// marks a process dead and calls schedule(), but can't free its own kernel
+// stack while still running on it). Walks the process_queue ring built by
+// enqueue_process and reclaims anything dead other than current_process.
+// A dead process is never re-enqueued into the MLFQ (see mlfq_enqueue), so
+// process_queue is the only place a zombie can still be found.
+static void reap_zombies(void) {
+  if (!process_queue) {
+    return;
+  }
+
+  uint64_t kernel_cr3 = (uint64_t)vmm_get_kernel_pml4() - hhdm_offset;
+
+  process_t *node = process_queue;
+  size_t count = 0;
+  process_t *p = node;
+  do {
+    count++;
+    p = p->next;
+  } while (p != node);
+
+  for (size_t i = 0; i < count; i++) {
+    process_t *victim = node;
+    node = node->next;
+
+    if (victim->state != PROCESS_DEAD || victim == current_process) {
+      continue;
+    }
+
+    victim->prev->next = victim->next;
+    victim->next->prev = victim->prev;
+    if (process_queue == victim) {
+      process_queue = (victim->next != victim) ? victim->next : NULL;
+    }
+
+    pmm_free_page((void *)((uint64_t)victim->kernel_stack - hhdm_offset));
+    // Kernel threads share the kernel pml4 and must keep it; only a user
+    // process owns a private pagetable that needs tearing down.
+    if (victim->cr3 != kernel_cr3) {
+      vmm_destroy_user_pagetable((uint64_t *)(victim->cr3 + hhdm_offset));
+    }
+    kfree(victim);
+
+    if (!process_queue) {
+      return;
+    }
+  }
+}
+
 void schedule() {
   if (!current_process)
     return;
+
+  reap_zombies();
 
   process_t *prev = current_process;
 

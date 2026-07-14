@@ -103,6 +103,48 @@ uint64_t *vmm_new_user_pagetable(void) {
   return pml4;
 }
 
+void vmm_destroy_user_pagetable(uint64_t *pml4) {
+  if (!pml4) {
+    return;
+  }
+
+  for (size_t pml4_i = 0; pml4_i < 256; pml4_i++) {
+    if (!(pml4[pml4_i] & PTE_PRESENT)) {
+      continue;
+    }
+    uint64_t *pdpt =
+        (uint64_t *)((pml4[pml4_i] & 0x000FFFFFFFFFF000) + hhdm_offset);
+
+    for (size_t pdpt_i = 0; pdpt_i < 512; pdpt_i++) {
+      if (!(pdpt[pdpt_i] & PTE_PRESENT)) {
+        continue;
+      }
+      uint64_t *pd =
+          (uint64_t *)((pdpt[pdpt_i] & 0x000FFFFFFFFFF000) + hhdm_offset);
+
+      for (size_t pd_i = 0; pd_i < 512; pd_i++) {
+        if (!(pd[pd_i] & PTE_PRESENT)) {
+          continue;
+        }
+        uint64_t *pt =
+            (uint64_t *)((pd[pd_i] & 0x000FFFFFFFFFF000) + hhdm_offset);
+
+        for (size_t pt_i = 0; pt_i < 512; pt_i++) {
+          if (pt[pt_i] & PTE_PRESENT) {
+            pmm_free_page(
+                (void *)(pt[pt_i] & 0x000FFFFFFFFFF000));
+          }
+        }
+        pmm_free_page((void *)(pd[pd_i] & 0x000FFFFFFFFFF000));
+      }
+      pmm_free_page((void *)(pdpt[pdpt_i] & 0x000FFFFFFFFFF000));
+    }
+    pmm_free_page((void *)(pml4[pml4_i] & 0x000FFFFFFFFFF000));
+  }
+
+  pmm_free_page((void *)((uint64_t)pml4 - hhdm_offset));
+}
+
 void init_vmm(void) {
   uint64_t cr3;
   asm volatile("mov %%cr3, %0" : "=r"(cr3));

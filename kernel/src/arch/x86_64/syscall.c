@@ -4,9 +4,11 @@
 #include <utils.h>
 
 #include <arch/x86_64/drivers/keyboard.h>
+#include <arch/x86_64/include/syscall.h>
+#include <arch/x86_64/include/tty.h>
 #include <process.h>
 #include <stdint.h>
-#include <syscall.h>
+#include <sys/syscall.h>
 #include <tty.h>
 
 struct syscall_frame {
@@ -17,10 +19,19 @@ struct syscall_frame {
   uint64_t user_rip;
 };
 
+/**
+ * @brief Handles system calls invoked by user processes.
+ * 
+ * This function is called when a user process invokes a system call using the `syscall` instruction.
+ * It takes a pointer to a `syscall_frame` structure that contains the register values at
+ * the time of the system call. The function processes the system call based on the value in the `rax` register,
+ * which indicates the system call number. It supports various system calls such as reading from
+ * the keyboard, writing to the console, opening and closing files, and exiting the process.
+ */
 // https://chromium.googlesource.com/chromiumos/docs/+/master/constants/syscalls.md#x86_64-64_bit
 void syscall_handler_c(struct syscall_frame *frame) {
   switch (frame->rax) {
-  case 0: // sys_read
+  case SYS_read:
     if (frame->rdi == 0) {
       frame->rax = keyboard_read((char *)frame->rsi, (int)frame->rdx);
 
@@ -46,14 +57,13 @@ void syscall_handler_c(struct syscall_frame *frame) {
     }
     break;
 
-  case 1: // sys_write
+  case SYS_write:
     if (frame->rdi == 1) {
       print((const char *)frame->rsi);
     }
     frame->rax = frame->rdx;
     break;
-    // sys_read
-  case 2: {
+  case SYS_open: {
     const char *filename = (const char *)frame->rdi;
     vfs_node_t *file = vfs_find_node(vfs_root, filename);
     if (!file || file->type != VFS_FILE) {
@@ -80,7 +90,7 @@ void syscall_handler_c(struct syscall_frame *frame) {
     }
     break;
   }
-  case 3:
+  case SYS_close:
     if (frame->rdi >= 3 && frame->rdi < MAX_FDS) {
       current_process->fd_table[frame->rdi].node = NULL;
       frame->rax = 0;
@@ -88,7 +98,7 @@ void syscall_handler_c(struct syscall_frame *frame) {
       frame->rax = -1;
     }
     break;
-  case 60: // sys_exit
+  case SYS_exit:
     print("\n[Syscall] Process exited.\n");
 
     if (current_process) {

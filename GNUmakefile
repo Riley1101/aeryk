@@ -25,7 +25,8 @@ override USERLAND_CFLAGS := -g -O2 -pipe \
     -m64 -march=x86-64 -mabi=sysv \
     -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone \
     -ffreestanding -fno-stack-protector -fno-pic -fno-pie \
-    -Ikernel/freestnd-c-hdrs/include
+    -Ikernel/freestnd-c-hdrs/include \
+    -Ilibc/include
 
 .PHONY: all
 all: $(IMAGE_NAME).iso

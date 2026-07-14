@@ -4,6 +4,14 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/**
+ * @brief Copy a block of memory from source to destination.
+ * 
+ * @param dest Pointer to the destination memory block.
+ * @param src Pointer to the source memory block.
+ * @param len Number of bytes to copy.
+ * @return Pointer to the destination memory block.
+ */
 void *memcpy(void *restrict dest, const void *restrict src, size_t len)
 {
     uint8_t *restrict pdest = (uint8_t *restrict)dest;
@@ -15,6 +23,14 @@ void *memcpy(void *restrict dest, const void *restrict src, size_t len)
     return dest;
 }
 
+/**
+ * @brief Set a block of memory to a specified value.
+ * 
+ * @param s Pointer to the memory block to set.
+ * @param c Value to set each byte of the memory block to.
+ * @param n Number of bytes to set.
+ * @return Pointer to the memory block.
+ */
 void *memset(void *s, int c, size_t n)
 {
     uint8_t *p = (uint8_t *)s;
@@ -25,6 +41,14 @@ void *memset(void *s, int c, size_t n)
     return s;
 }
 
+/**
+ * @brief Move a block of memory from source to destination.
+ * 
+ * @param dest Pointer to the destination memory block.
+ * @param src Pointer to the source memory block.
+ * @param n Number of bytes to move.
+ * @return Pointer to the destination memory block.
+ */
 void *memmove(void *dest, const void *src, size_t n)
 {
     uint8_t *pdest = (uint8_t *)dest;
@@ -46,6 +70,14 @@ void *memmove(void *dest, const void *src, size_t n)
     return dest;
 }
 
+/**
+ * @brief Compare two blocks of memory.
+ * 
+ * @param s1 Pointer to the first memory block.
+ * @param s2 Pointer to the second memory block.
+ * @param n Number of bytes to compare.
+ * @return 0 if the blocks are identical, negative if the first block is less than the second, positive otherwise.
+ */
 int memcmp(const void *s1, const void *s2, size_t n)
 {
     const uint8_t *p1 = (const uint8_t *)s1;

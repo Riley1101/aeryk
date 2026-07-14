@@ -58,6 +58,29 @@ static void hcf(void)
     }
 }
 
+// Finds the loaded Limine module whose path ends with `suffix` (e.g. an
+// initramfs image bundled by name). Returns NULL if no module matches.
+static struct limine_file *find_module_by_suffix(
+    struct limine_module_response *modules, const char *suffix)
+{
+    if (modules == NULL)
+    {
+        return NULL;
+    }
+
+    size_t slen = strlen(suffix);
+    for (size_t i = 0; i < modules->module_count; i++)
+    {
+        struct limine_file *mod = modules->modules[i];
+        size_t plen = strlen(mod->path);
+        if (plen >= slen && memcmp(mod->path + plen - slen, suffix, slen) == 0)
+        {
+            return mod;
+        }
+    }
+    return NULL;
+}
+
 // Main kernel entry point
 void kmain(void)
 {
@@ -93,8 +116,11 @@ void kmain(void)
     struct PSF1_FONT psf_font;
     struct PSF1_FONT *psf = &psf_font;
 
-    load_psf1("cp850-8x16.psf", psf,
-              (struct limine_module_response *)module_request.response);
+    if (!load_psf1("cp850-8x16.psf", psf,
+                    (struct limine_module_response *)module_request.response))
+    {
+        hcf();
+    }
 
     // Initialize the screen FIRST
     init_renderer(global_renderer, &f, psf);
@@ -145,21 +171,17 @@ void kmain(void)
         print("[-] kfree released slab chunk cleanly.\n");
     }
 
-    if (module_request.response != NULL)
+    struct limine_file *initramfs_mod = find_module_by_suffix(
+        (struct limine_module_response *)module_request.response,
+        "initramfs.cpio");
+    if (initramfs_mod != NULL)
     {
-        const char *suffix = "initramfs.cpio";
-        size_t slen = 14;
-        for (size_t i = 0; i < module_request.response->module_count; i++)
-        {
-            struct limine_file *mod = module_request.response->modules[i];
-            size_t plen = strlen(mod->path);
-            if (plen >= slen && memcmp(mod->path + plen - slen, suffix, slen) == 0)
-            {
-                print("[5] Parsing initramfs...\n");
-                initramfs_init(mod->address, mod->size);
-                break;
-            }
-        }
+        print("[5] Parsing initramfs...\n");
+        initramfs_init(initramfs_mod->address, initramfs_mod->size);
+    }
+    else
+    {
+        print("[!] ERROR: initramfs.cpio module not found\n");
     }
 
     init_keyboard();
@@ -181,6 +203,10 @@ void kmain(void)
 
     schedule();
 
+    // Only reached if schedule() picked idle_process as current_process
+    // was already idle (i.e. no runnable process existed yet) — a normal
+    // switch_task() into a real process does not return here at all,
+    // since kmain is not itself a process on the switched-away stack.
     asm volatile("sti");
     hcf();
 }

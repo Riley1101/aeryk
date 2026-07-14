@@ -7,6 +7,7 @@
 #define EOF (-1)
 
 static bool printf(const char *restrict format, ...);
+
 bool putchar(int);
 bool puts(const char *restrict format);
 

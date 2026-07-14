@@ -21,5 +21,12 @@ uint64_t *vmm_get_kernel_pml4(void);
 // HHDM virtual address, or NULL on allocation failure.
 uint64_t *vmm_new_user_pagetable(void);
 
+// Frees every physical frame mapped in the user half (entries 0-255) of
+// pml4, including the intermediate PDPT/PD/PT structure pages themselves,
+// then frees the pml4 page. Safe to call on a partially-populated pagetable
+// (e.g. after a failed elf_load), since unmapped entries are simply skipped.
+// Does not touch the shared kernel half (entries 256-511).
+void vmm_destroy_user_pagetable(uint64_t *pml4);
+
 #endif /* ifndef VMM_H */
 

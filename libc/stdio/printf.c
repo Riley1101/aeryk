@@ -5,6 +5,12 @@
 #include <stdio.h>
 #include <string.h>
 
+/*
+ * @brief Print a block of memory to the console.
+ * @param data Pointer to the memory block to print.
+ * @param length Number of bytes to print.
+ * @return true if the block was printed successfully, false otherwise.
+ */
 static bool print(const char *restrict data, size_t length) {
   const unsigned char *bytes = (const unsigned char *)data;
   for (size_t i = 0; i < length; i++) {
@@ -15,6 +21,12 @@ static bool print(const char *restrict data, size_t length) {
   return true;
 }
 
+/*
+ * @brief Print a formatted string to the console.
+ * @param format The format string.
+ * @param ... Additional arguments for formatting.
+ * @return The number of characters printed, or -1 on error.
+ */
 static bool printf(const char *restrict format, ...) {
   va_list parameters;
   va_start(parameters, format);

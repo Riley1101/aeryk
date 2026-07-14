@@ -47,13 +47,14 @@ static struct limine_file *get_file(const char *name, struct limine_module_respo
     return NULL;
 }
 
-void load_psf1(const char *name, struct PSF1_FONT *font, struct limine_module_response *modules)
+bool load_psf1(const char *name, struct PSF1_FONT *font, struct limine_module_response *modules)
 {
     struct limine_file *file = get_file(name, modules);
 
     if (file == NULL)
-        return;
+        return false;
 
     font->psf1_header = (struct PSF1_HEADER *)file->address;
     font->glyph_buffer = (void *)((uint64_t)file->address + sizeof(struct PSF1_HEADER));
+    return true;
 }
