@@ -1,15 +1,10 @@
 {
     "configurations": [
         {
-            "name": "Mac",
-            "includePath": [
-                "${workspaceFolder}/**"
-            ],
-            "defines": [],
-            "compilerPath": "/usr/bin/clang",
-            "cStandard": "c17",
-            "cppStandard": "c++14",
-            "intelliSenseMode": "macos-clang-arm64"
+            "name": "OSDev",
+            "compileCommands": "${workspaceFolder}/compile_commands.json",
+            "cStandard": "c11",
+            "intelliSenseMode": "linux-gcc-x64"
         }
     ],
     "version": 4
