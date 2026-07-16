@@ -323,10 +323,18 @@ clean:
 	rm -rf iso_root $(IMAGE_NAME).iso $(IMAGE_NAME).hdd tests/bin \
 		obj-userland $(USERLAND_ELFS) initramfs_root/bin initramfs.cpio
 
+.PHONY: docs
+docs:
+	doxygen Doxyfile
+
+.PHONY: docs-clean
+docs-clean:
+	rm -rf docs
+
 .PHONY: distclean
 distclean:
 	$(MAKE) -C kernel distclean
-	rm -rf iso_root *.iso *.hdd limine edk2-ovmf unity tests/bin
+	rm -rf iso_root *.iso *.hdd limine edk2-ovmf unity tests/bin docs
 
 .PHONY: debug
 debug: edk2-ovmf $(IMAGE_NAME).iso

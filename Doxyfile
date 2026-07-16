@@ -1,0 +1,21 @@
+# Minimal Doxygen config for aeryk. Run `make docs` to generate HTML into
+# docs/html/index.html. See https://doxygen.nl/manual/config.html for the
+# full list of options if you need to tweak this further.
+
+PROJECT_NAME           = "aeryk"
+OUTPUT_DIRECTORY       = docs
+OUTPUT_LANGUAGE        = English
+
+INPUT                  = kernel/src abi/include libc/include libc
+RECURSIVE              = YES
+FILE_PATTERNS          = *.c *.h
+
+GENERATE_HTML          = YES
+GENERATE_LATEX         = NO
+
+EXTRACT_ALL             = YES
+EXTRACT_STATIC          = YES
+QUIET                    = YES
+WARN_IF_UNDOCUMENTED     = NO
+
+OPTIMIZE_OUTPUT_FOR_C   = YES

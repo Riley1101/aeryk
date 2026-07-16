@@ -116,6 +116,8 @@ void syscall_handler_c(struct syscall_frame *frame) {
     }
 
     process_t *child = create_user_process(path);
+    // If the process creation fails, return -1
+    // Otherwise, return the PID of the newly created process
     frame->rax = child ? (int64_t)child->pid : -1;
     break;
   }
