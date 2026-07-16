@@ -36,3 +36,12 @@ int close(int fd) {
                 : "rcx", "r11", "memory");
   return (int)ret;
 }
+
+int spawn(const char *path) {
+  long ret;
+  asm volatile("syscall"
+                : "=a"(ret)
+                : "0"(SYS_spawn), "D"(path)
+                : "rcx", "r11", "memory");
+  return (int)ret;
+}

@@ -42,6 +42,10 @@ typedef struct process {
   uint64_t user_stack_top; // top of the user stack (ring 3)
 
   file_descriptor_t fd_table[MAX_FDS];
+
+  // -- Parent/child + exit status --
+  struct process *parent;
+  int exit_code;
 } process_t;
 
 void init_scheduler(void);

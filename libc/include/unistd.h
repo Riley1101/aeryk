@@ -37,4 +37,11 @@ ssize_t write(int fd, const void *buf, size_t count);
  */
 int close(int fd);
 
+/**
+ * @brief Spawns a new user process from an executable path.
+ * @param path The path to the executable.
+ * @return Returns the pid of the new process or -1 on error.
+ */
+int spawn(const char *path);
+
 #endif // !_UNISTD_H

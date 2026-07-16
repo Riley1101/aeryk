@@ -19,6 +19,7 @@ process_t *process_queue = NULL;
 uint64_t next_pid = 1;
 
 static void kernel_thread_exit(void) {
+  current_process->exit_code = 0;
   current_process->state = PROCESS_DEAD;
   schedule();
   for (;;)
@@ -123,6 +124,7 @@ process_t *create_kernel_thread(void (*entrypoint)()) {
   proc->pid = next_pid++;
   proc->state = PROCESS_READY;
   proc->entrypoint = entrypoint;
+  proc->parent = current_process;
 
   // when entrypoint returns, land here instead of address 0
   proc->rsp = setup_kernel_stack(proc->kernel_stack, kernel_thread_stub);
@@ -183,6 +185,7 @@ process_t *create_user_process(const char *path) {
   proc->entry = entry;
   proc->user_stack_top = USER_STACK_TOP;
   proc->cr3 = (uint64_t)pml4 - hhdm_offset;
+  proc->parent = current_process;
 
   // when user_thread_stub returns (it shouldn't), land here instead of 0
   proc->rsp = setup_kernel_stack(proc->kernel_stack, user_thread_stub);
@@ -201,6 +204,11 @@ process_t *create_user_process(const char *path) {
 // enqueue_process and reclaims anything dead other than current_process.
 // A dead process is never re-enqueued into the MLFQ (see mlfq_enqueue), so
 // process_queue is the only place a zombie can still be found.
+//
+// A dead process with a live parent is left as a zombie (state ==
+// PROCESS_DEAD, exit_code populated) so a future wait()/waitpid() can read
+// its exit_code; wait() is responsible for freeing it. Only parentless
+// (orphaned) processes are auto-reaped here.
 static void reap_zombies(void) {
   if (!process_queue) {
     return;
@@ -220,7 +228,8 @@ static void reap_zombies(void) {
     process_t *victim = node;
     node = node->next;
 
-    if (victim->state != PROCESS_DEAD || victim == current_process) {
+    if (victim->state != PROCESS_DEAD || victim == current_process ||
+        victim->parent != NULL) {
       continue;
     }
 

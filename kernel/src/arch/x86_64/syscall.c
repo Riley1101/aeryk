@@ -96,6 +96,29 @@ void syscall_handler_c(struct syscall_frame *frame) {
     }
     break;
   }
+  case SYS_spawn: {
+    const char *user_path = (const char *)frame->rdi;
+    if (!user_path) {
+      frame->rax = -1;
+      break;
+    }
+
+    char path[128];
+    size_t i = 0;
+    for (; i < sizeof(path) - 1 && user_path[i] != '\0'; i++) {
+      path[i] = user_path[i];
+    }
+    path[i] = '\0';
+
+    if (i == 0) {
+      frame->rax = -1;
+      break;
+    }
+
+    process_t *child = create_user_process(path);
+    frame->rax = child ? (int64_t)child->pid : -1;
+    break;
+  }
   case SYS_close:
     if (frame->rdi >= 3 && frame->rdi < MAX_FDS) {
       current_process->fd_table[frame->rdi].node = NULL;
@@ -108,6 +131,7 @@ void syscall_handler_c(struct syscall_frame *frame) {
     print("\n[Syscall] Process exited.\n");
 
     if (current_process) {
+      current_process->exit_code = (int)frame->rdi;
       current_process->state = PROCESS_DEAD;
       schedule();
     }
