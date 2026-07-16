@@ -1,4 +1,4 @@
-#include "arch/x86_64/drivers/serial.h"
+#include "serial.h"
 #include <utils.h>
 
 // https://wiki.osdev.org/Serial_Ports

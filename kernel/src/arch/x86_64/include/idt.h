@@ -1,8 +1,7 @@
 #ifndef IDT
 #define IDT
-#include "tty.h"
-
 #include <stdint.h>
+#include <tty.h>
 
 // https://wiki.osdev.org/Interrupt_Descriptor_Table
 struct idt_entry_struct

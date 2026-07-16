@@ -26,7 +26,8 @@ override USERLAND_CFLAGS := -g -O2 -pipe \
     -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone \
     -ffreestanding -fno-stack-protector -fno-pic -fno-pie \
     -Ikernel/freestnd-c-hdrs/include \
-    -Ilibc/include
+    -Ilibc/include \
+    -Iabi/include
 
 .PHONY: all
 all: $(IMAGE_NAME).iso
@@ -166,13 +167,22 @@ limine/limine:
 kernel/.deps-obtained:
 	./kernel/get-deps
 
-userland/init.elf: userland/init.c userland/linker.lds kernel/src/arch/x86_64/crt0.asm libc/stdlib/exit.c
+override USERLAND_LIBC_SRCS := \
+    libc/stdlib/exit.c \
+    libc/unistd.c \
+    libc/stdio/putchar.c \
+    libc/stdio/puts.c \
+    libc/string/strlen.c
+
+override USERLAND_LIBC_OBJS := $(addprefix obj-userland/,$(notdir $(USERLAND_LIBC_SRCS:.c=.c.o)))
+
+userland/init.elf: userland/init.c userland/linker.lds kernel/src/arch/x86_64/crt0.asm $(USERLAND_LIBC_SRCS)
 	mkdir -p obj-userland
 	nasm -f elf64 kernel/src/arch/x86_64/crt0.asm -o obj-userland/crt0.asm.o
 	$(USER_CC) $(USERLAND_CFLAGS) -c userland/init.c -o obj-userland/init.c.o
-	$(USER_CC) $(USERLAND_CFLAGS) -c libc/stdlib/exit.c -o obj-userland/exit.c.o
+	$(foreach src,$(USERLAND_LIBC_SRCS),$(USER_CC) $(USERLAND_CFLAGS) -c $(src) -o obj-userland/$(notdir $(src:.c=.c.o));)
 	$(USER_LD) -nostdlib -static -m elf_x86_64 -T userland/linker.lds \
-		obj-userland/crt0.asm.o obj-userland/init.c.o obj-userland/exit.c.o -o userland/init.elf
+		obj-userland/crt0.asm.o obj-userland/init.c.o $(USERLAND_LIBC_OBJS) -o userland/init.elf
 
 initramfs.cpio: userland/init.elf
 	mkdir -p initramfs_root/bin
@@ -261,6 +271,7 @@ override TEST_CFLAGS := $(HOST_CFLAGS) -std=gnu11 \
     -I kernel/src/arch/x86_64/include \
     -I kernel/src \
     -I kernel/limine-protocol/include \
+    -I abi/include \
     -I unity/src
 
 .PHONY: test

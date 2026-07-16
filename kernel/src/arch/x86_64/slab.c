@@ -1,9 +1,9 @@
 #include "slab.h"
-#include "pmm.h"
-#include "tty.h"
+#include <pmm.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+#include <tty.h>
 
 #define SLAB_MAGIC 0x51AB51AB
 #define NUM_CACHES 8

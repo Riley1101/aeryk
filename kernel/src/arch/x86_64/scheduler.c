@@ -1,8 +1,8 @@
-#include "tty.h"
 #include <process.h>
 #include <scheduler.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <tty.h>
 
 #define NUM_QUEUES 4
 #define PRIORITY_BOOST_INTERVAL 100

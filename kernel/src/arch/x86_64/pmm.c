@@ -1,10 +1,10 @@
-#include "tty.h"
 #include <limine.h>
 #include <pmm.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+#include <tty.h>
 
 uint64_t hhdm_offset = 0;
 

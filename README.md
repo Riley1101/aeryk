@@ -41,6 +41,11 @@ A x86_64 kernel written in C, booted via the [Limine](https://codeberg.org/Limin
 - [ ] Input and IPC
 - [ ] Compositor
 
+
+
+## Libc Notes
+- [x] string.c
+
 ## Build
 
 **macOS**

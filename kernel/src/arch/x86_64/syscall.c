@@ -1,16 +1,22 @@
-#include "arch/x86_64/fs/vfs.h"
 #include <stddef.h>
 #include <string.h>
 #include <utils.h>
 
+#include <arch/x86_64/fs/vfs.h>
 #include <arch/x86_64/drivers/keyboard.h>
-#include <arch/x86_64/include/syscall.h>
-#include <arch/x86_64/include/tty.h>
+
 #include <process.h>
 #include <stdint.h>
-#include <sys/syscall.h>
+#include <syscall.h>
 #include <tty.h>
 
+/**
+ * @brief Structure representing the state of registers during a system call.
+ * 
+ * This structure is used to capture the values of registers when a user process
+ * invokes a system call. It contains the values of general-purpose registers,
+ * as well as the user stack pointer, flags, and instruction pointer.
+ */
 struct syscall_frame {
   uint64_t rax;
   uint64_t r9, r8, r10, rdx, rsi, rdi;

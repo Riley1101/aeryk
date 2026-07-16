@@ -1,11 +1,11 @@
 #include "timer.h"
-#include "scheduler.h"
 #include <apic.h>
 #include <idt.h>
+#include <process.h>
+#include <scheduler.h>
 #include <stdint.h>
 #include <tty.h>
 #include <utils.h>
-#include <process.h>
 
 #define PIT_CMD 0x43
 #define PIT_CHANNEL0 0x40

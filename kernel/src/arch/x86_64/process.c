@@ -1,15 +1,14 @@
-#include "gdt.h"
-#include "pmm.h"
-#include "scheduler.h"
-#include "slab.h"
-#include "vmm.h"
 #include <elf.h>
+#include <gdt.h>
+#include <pmm.h>
 #include <process.h>
+#include <scheduler.h>
+#include <slab.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
-
-#include <arch/x86_64/include/syscall.h>
+#include <syscall.h>
+#include <vmm.h>
 
 extern void switch_task(process_t *prev, process_t *next);
 
