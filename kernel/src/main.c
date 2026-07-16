@@ -2,6 +2,7 @@
 #include <arch/x86_64/drivers/keyboard.h>
 #include <arch/x86_64/drivers/serial.h>
 #include <arch/x86_64/fs/initramfs.h>
+
 #include <font.h>
 #include <gdt.h>
 #include <idt.h>
@@ -156,6 +157,7 @@ void kmain(void)
     print("[3] IRQ0 PIT Timer calibration started.\n");
 
     print("[4] Slab Allocator kmalloc online.\n");
+
     init_slab();
 
     init_scheduler();
@@ -199,6 +201,15 @@ void kmain(void)
     else
     {
         print("[8] /bin/init loaded, switching to Ring 3...\n");
+    }
+
+    if (create_user_process("/bin/cat") == NULL)
+    {
+        print("[!] ERROR: failed to load /bin/cat\n");
+    }
+    else
+    {
+        print("[8] /bin/cat loaded, switching to Ring 3...\n");
     }
 
     schedule();

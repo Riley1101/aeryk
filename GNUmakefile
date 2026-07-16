@@ -20,6 +20,7 @@ HOST_LIBS :=
 # TOOLCHAIN_PREFIX used for the kernel (e.g. TOOLCHAIN_PREFIX=x86_64-elf-).
 USER_CC := $(TOOLCHAIN_PREFIX)gcc
 USER_LD := $(TOOLCHAIN_PREFIX)ld
+USER_AR := $(TOOLCHAIN_PREFIX)ar
 
 override USERLAND_CFLAGS := -g -O2 -pipe \
     -m64 -march=x86-64 -mabi=sysv \
@@ -167,27 +168,51 @@ limine/limine:
 kernel/.deps-obtained:
 	./kernel/get-deps
 
+# Every userland program is userland/<name>.c -> userland/<name>.elf, linked
+# against crt0.o and the common libc.a. To add a new program, just drop its
+# name in USERLAND_PROGS -- no other Makefile changes needed.
+override USERLAND_PROGS := init cat
+
 override USERLAND_LIBC_SRCS := \
     libc/stdlib/exit.c \
     libc/unistd.c \
     libc/stdio/putchar.c \
     libc/stdio/puts.c \
+    libc/stdio/printf.c \
     libc/string/strlen.c
 
-override USERLAND_LIBC_OBJS := $(addprefix obj-userland/,$(notdir $(USERLAND_LIBC_SRCS:.c=.c.o)))
+override USERLAND_LIBC_OBJS := $(patsubst libc/%.c,obj-userland/libc/%.o,$(USERLAND_LIBC_SRCS))
+override USERLAND_ELFS := $(addprefix userland/,$(addsuffix .elf,$(USERLAND_PROGS)))
 
-userland/init.elf: userland/init.c userland/linker.lds kernel/src/arch/x86_64/crt0.asm $(USERLAND_LIBC_SRCS)
-	mkdir -p obj-userland
-	nasm -f elf64 kernel/src/arch/x86_64/crt0.asm -o obj-userland/crt0.asm.o
-	$(USER_CC) $(USERLAND_CFLAGS) -c userland/init.c -o obj-userland/init.c.o
-	$(foreach src,$(USERLAND_LIBC_SRCS),$(USER_CC) $(USERLAND_CFLAGS) -c $(src) -o obj-userland/$(notdir $(src:.c=.c.o));)
+# Keep chained pattern-rule intermediates (e.g. obj-userland/init.c.o) around
+# instead of letting make delete them as throwaway intermediates.
+.SECONDARY: $(USERLAND_LIBC_OBJS) obj-userland/crt0.o obj-userland/libc.a \
+	$(addprefix obj-userland/,$(addsuffix .c.o,$(USERLAND_PROGS)))
+
+obj-userland/libc/%.o: libc/%.c
+	mkdir -p $(dir $@)
+	$(USER_CC) $(USERLAND_CFLAGS) -c $< -o $@
+
+obj-userland/libc.a: $(USERLAND_LIBC_OBJS)
+	mkdir -p $(dir $@)
+	$(USER_AR) rcs $@ $^
+
+obj-userland/crt0.o: kernel/src/arch/x86_64/crt0.asm
+	mkdir -p $(dir $@)
+	nasm -f elf64 $< -o $@
+
+obj-userland/%.c.o: userland/%.c
+	mkdir -p $(dir $@)
+	$(USER_CC) $(USERLAND_CFLAGS) -c $< -o $@
+
+userland/%.elf: obj-userland/%.c.o userland/linker.lds obj-userland/crt0.o obj-userland/libc.a
 	$(USER_LD) -nostdlib -static -m elf_x86_64 -T userland/linker.lds \
-		obj-userland/crt0.asm.o obj-userland/init.c.o $(USERLAND_LIBC_OBJS) -o userland/init.elf
+		obj-userland/crt0.o $< obj-userland/libc.a -o $@
 
-initramfs.cpio: userland/init.elf
+initramfs.cpio: $(USERLAND_ELFS)
 	mkdir -p initramfs_root/bin
 	echo "Hello from the aeryk cpio initramfs!" > initramfs_root/hello.txt
-	cp -v userland/init.elf initramfs_root/bin/init
+	$(foreach elf,$(USERLAND_ELFS),cp -v $(elf) initramfs_root/bin/$(basename $(notdir $(elf)));)
 	cd initramfs_root && find . | cpio -o -H newc > ../initramfs.cpio
 
 .PHONY: kernel
@@ -296,7 +321,7 @@ test: unity/src/unity.c
 clean:
 	$(MAKE) -C kernel clean
 	rm -rf iso_root $(IMAGE_NAME).iso $(IMAGE_NAME).hdd tests/bin \
-		obj-userland userland/init.elf initramfs_root/bin initramfs.cpio
+		obj-userland $(USERLAND_ELFS) initramfs_root/bin initramfs.cpio
 
 .PHONY: distclean
 distclean:

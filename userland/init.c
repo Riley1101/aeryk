@@ -10,13 +10,14 @@
  * @return Returns 0 on success.
  */
 int main(void) {
-  puts("Hello from /bin/init (ring 3)!");
+  printf("Hello from /bin/init (ring 3)!\n");
 
   char buffer[128];
   int fd = open("/hello.txt");
   if (fd >= 0) {
     ssize_t n = read(fd, buffer, sizeof(buffer));
     if (n > 0) {
+      printf("Contents of /hello.txt:\n");
       write(1, buffer, n);
     }
     close(fd);

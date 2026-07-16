@@ -2,6 +2,7 @@
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -22,12 +23,39 @@ static bool print(const char *restrict data, size_t length) {
 }
 
 /*
+ * @brief Render an unsigned integer into buf in the given base.
+ * @param value The value to render.
+ * @param buf Destination buffer, must be large enough for the result.
+ * @param base Numeric base, between 2 and 16.
+ * @param uppercase Whether hex digits above 9 should be uppercase.
+ * @return The number of characters written to buf (not NUL-terminated).
+ */
+static int utoa(unsigned long value, char *buf, unsigned base, bool uppercase) {
+  static const char lower[] = "0123456789abcdef";
+  static const char upper[] = "0123456789ABCDEF";
+  const char *digits = uppercase ? upper : lower;
+
+  char tmp[32];
+  int len = 0;
+  do {
+    tmp[len++] = digits[value % base];
+    value /= base;
+  } while (value != 0);
+
+  for (int i = 0; i < len; i++) {
+    buf[i] = tmp[len - 1 - i];
+  }
+  return len;
+}
+
+/*
  * @brief Print a formatted string to the console.
- * @param format The format string. Supported format specifiers are %c for characters and %s for strings.
+ * @param format The format string. Supported format specifiers are %c, %s,
+ * %d, %u, %x and %p.
  * @param ... Additional arguments for formatting.
  * @return The number of characters printed, or -1 on error.
  */
-static bool printf(const char *restrict format, ...) {
+int printf(const char *restrict format, ...) {
   va_list parameters;
   va_start(parameters, format);
 
@@ -60,31 +88,14 @@ static bool printf(const char *restrict format, ...) {
         return -1;
       }
       written++;
-    } 
-    else if (*format == 'f'){
-      format++;
-      double num = va_arg(parameters, double);
-      char buffer[32]; // Enough to hold a double and null terminator
-      int len = snprintf(buffer, sizeof(buffer), "%f", num);
-      if (len < 0 || (size_t)len >= sizeof(buffer)) {
-        return -1; // Encoding error or buffer overflow
-      }
-      if (maxrem < (size_t)len) {
-        return -1;
-      }
-      if (!print(buffer, len)) {
-        return -1;
-      }
-      written += len;
-    } 
+    }
     else if (*format == 'p') {
       format++;
       void *ptr = va_arg(parameters, void *);
-      char buffer[19]; // Enough to hold 0x + 16 hex digits + null terminator
-      int len = snprintf(buffer, sizeof(buffer), "%p", ptr);
-      if (len < 0 || (size_t)len >= sizeof(buffer)) {
-        return -1; // Encoding error or buffer overflow
-      }
+      char buffer[2 + sizeof(uintptr_t) * 2];
+      buffer[0] = '0';
+      buffer[1] = 'x';
+      int len = 2 + utoa((unsigned long)(uintptr_t)ptr, buffer + 2, 16, false);
       if (maxrem < (size_t)len) {
         return -1;
       }
@@ -93,14 +104,16 @@ static bool printf(const char *restrict format, ...) {
       }
       written += len;
     }
-    else if (*format == 'd'){
+    else if (*format == 'd') {
       format++;
       int num = va_arg(parameters, int);
       char buffer[12]; // Enough to hold -2147483648 and null terminator
-      int len = snprintf(buffer, sizeof(buffer), "%d", num);
-      if (len < 0 || (size_t)len >= sizeof(buffer)) {
-        return -1; // Encoding error or buffer overflow
+      int len = 0;
+      unsigned long mag = (num < 0) ? -(unsigned long)num : (unsigned long)num;
+      if (num < 0) {
+        buffer[len++] = '-';
       }
+      len += utoa(mag, buffer + len, 10, false);
       if (maxrem < (size_t)len) {
         return -1;
       }
@@ -108,15 +121,12 @@ static bool printf(const char *restrict format, ...) {
         return -1;
       }
       written += len;
-    } 
+    }
     else if (*format == 'u') {
       format++;
       unsigned int num = va_arg(parameters, unsigned int);
-      char buffer[11]; // Enough to hold 4294967295 and null terminator
-      int len = snprintf(buffer, sizeof(buffer), "%u", num);
-      if (len < 0 || (size_t)len >= sizeof(buffer)) {
-        return -1; // Encoding error or buffer overflow
-      }
+      char buffer[10]; // Enough to hold 4294967295
+      int len = utoa(num, buffer, 10, false);
       if (maxrem < (size_t)len) {
         return -1;
       }
@@ -124,15 +134,12 @@ static bool printf(const char *restrict format, ...) {
         return -1;
       }
       written += len;
-    } 
+    }
     else if (*format == 'x') {
       format++;
       unsigned int num = va_arg(parameters, unsigned int);
-      char buffer[9]; // Enough to hold ffffffff and null terminator
-      int len = snprintf(buffer, sizeof(buffer), "%x", num);
-      if (len < 0 || (size_t)len >= sizeof(buffer)) {
-        return -1; // Encoding error or buffer overflow
-      }
+      char buffer[8]; // Enough to hold ffffffff
+      int len = utoa(num, buffer, 16, false);
       if (maxrem < (size_t)len) {
         return -1;
       }
