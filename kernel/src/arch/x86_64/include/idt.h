@@ -3,7 +3,11 @@
 #include <stdint.h>
 #include <tty.h>
 
-// https://wiki.osdev.org/Interrupt_Descriptor_Table
+/**
+ * @brief Represents an entry in the Interrupt Descriptor Table (IDT).
+ *
+ * @see https://wiki.osdev.org/Interrupt_Descriptor_Table#Structure_on_x86-64
+ */
 struct idt_entry_struct
 {
     uint16_t base_low;
@@ -15,12 +19,25 @@ struct idt_entry_struct
     uint32_t reserved;
 } __attribute__((packed));
 
+/**
+ * @brief Represents a pointer to the Interrupt Descriptor Table (IDT).
+ *
+ * @see https://wiki.osdev.org/Interrupt_Descriptor_Table#Structure_on_x86-64
+ */
 struct idt_ptr_struct
 {
     uint16_t limit;
     uint64_t base;
 } __attribute__((packed));
 
+/**
+ * @brief Represents the CPU state saved during an interrupt.
+ * @see https://wiki.osdev.org/Interrupt_Descriptor_Table#Structure_on_x86-64
+ * @note This structure is used to store the CPU state when an interrupt occurs, allowing the interrupt handler to access and modify the CPU registers as needed.
+ * @note The order of the registers in this structure matches the order in which they are pushed onto the stack by the interrupt handler.
+ *
+ * @see idt.asm for the assembly implementation of the interrupt service routines.
+ */
 struct interrupt_frame
 {
     uint64_t r15, r14, r13, r12, r11, r10, r9, r8;

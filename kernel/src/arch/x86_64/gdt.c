@@ -3,11 +3,32 @@
 
 #define GDT_SIZE 7 // index 5 + 6 form the 16-byte 64-bit TSS descriptor
 
+/**
+ * @file Global Descriptor Table (GDT) initialization
+ * and handling for x86_64 architecture.
+ *
+ * @see https://wiki.osdev.org/GDT_Tutorial
+ */
+
+/**
+ * @brief Global Descriptor Table (GDT) entries array.
+ *
+ * This array keeps all the GDT entries used by the kernel.
+ */
 struct gdt_entry_struct gdt_entries[GDT_SIZE];
+
+/**
+ * @brief Task State Segment (TSS) entry used by the kernel.
+ */
 struct tss_entry_struct tss_entry;
+
 struct gdt_ptr_struct gdt_ptr;
 
-// @see https://wiki.osdev.org/GDT_Tutorial
+/**
+ * @brief Initializes the Global Descriptor Table (GDT) and the Task State Segment (TSS).
+ *
+ * @see https://wiki.osdev.org/GDT_Tutorial
+ */
 void init_gdt()
 {
     gdt_ptr.limit = (sizeof(struct gdt_entry_struct) * GDT_SIZE) - 1;

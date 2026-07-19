@@ -51,6 +51,9 @@ __attribute__((used,
 __attribute__((used, section(".limine_requests_end"))) static volatile uint64_t
     limine_requests_end_marker[] = LIMINE_REQUESTS_END_MARKER;
 
+/**
+ * @brief Halts the CPU indefinitely by executing the HLT instruction in an infinite loop.
+ */
 static void hcf(void)
 {
     for (;;)
@@ -82,17 +85,10 @@ static struct limine_file *find_module_by_suffix(
     return NULL;
 }
 
-// Main kernel entry point
-void kmain(void)
+// Sets up the framebuffer-backed renderer and loads the boot font. Halts on
+// any missing Limine response, since there is no fallback display path.
+static void init_display(void)
 {
-    init_gdt();
-    init_idt();
-
-    if (LIMINE_BASE_REVISION_SUPPORTED(limine_base_revision) == false)
-    {
-        hcf();
-    }
-
     if (framebuffer_request.response == NULL ||
         framebuffer_request.response->framebuffer_count < 1)
     {
@@ -103,46 +99,33 @@ void kmain(void)
         framebuffer_request.response->framebuffers[0];
 
     FrameBuffer f;
-    {
-        f.base_address = framebuffer->address;
-        f.width = framebuffer->width;
-        f.height = framebuffer->height;
-        f.pixels_per_scan_line = framebuffer->pitch / 4;
-        f.buffer_size = framebuffer->height * framebuffer->pitch;
-    };
+    f.base_address = framebuffer->address;
+    f.width = framebuffer->width;
+    f.height = framebuffer->height;
+    f.pixels_per_scan_line = framebuffer->pitch / 4;
+    f.buffer_size = framebuffer->height * framebuffer->pitch;
 
-    Renderer renderer;
+    static Renderer renderer;
     global_renderer = &renderer;
 
-    struct PSF1_FONT psf_font;
-    struct PSF1_FONT *psf = &psf_font;
-
-    if (!load_psf1("cp850-8x16.psf", psf,
-                    (struct limine_module_response *)module_request.response))
+    static struct PSF1_FONT psf;
+    if (!load_psf1("cp850-8x16.psf", &psf,
+                   (struct limine_module_response *)module_request.response))
     {
         hcf();
     }
 
-    // Initialize the screen FIRST
-    init_renderer(global_renderer, &f, psf);
+    init_renderer(global_renderer, &f, &psf);
+}
 
-    // init_serial();
-    init_serial();
-
-    init_pmm();
-
-    print("[0] PMM Initialized\n");
-
-    init_vmm();
-    print("[1] VMM Initialized.\n");
-
+static void init_apic_timer(void)
+{
     init_apic();
 
     // Route irq 1 to idt 33
     ioapic_set_irq(1, 0, 33);
 
     uint32_t svr = lapic_read(LAPIC_SVR);
-
     if ((svr & 0x100) != 0)
     {
         print("[2] APIC verified online.\n");
@@ -153,15 +136,11 @@ void kmain(void)
     }
 
     init_timer();
-
     print("[3] IRQ0 PIT Timer calibration started.\n");
+}
 
-    print("[4] Slab Allocator kmalloc online.\n");
-
-    init_slab();
-
-    init_scheduler();
-
+static void run_slab_smoke_test(void)
+{
     print("[-] Running slab test with dynamic kmalloc.\n");
 
     uint32_t *test_ptr = (uint32_t *)kmalloc(sizeof(uint32_t) * 10);
@@ -172,7 +151,10 @@ void kmain(void)
         kfree(test_ptr);
         print("[-] kfree released slab chunk cleanly.\n");
     }
+}
 
+static void mount_initramfs(void)
+{
     struct limine_file *initramfs_mod = find_module_by_suffix(
         (struct limine_module_response *)module_request.response,
         "initramfs.cpio");
@@ -185,15 +167,10 @@ void kmain(void)
     {
         print("[!] ERROR: initramfs.cpio module not found\n");
     }
+}
 
-    init_keyboard();
-
-    print("[6] IRQ1 keyboard listening...\n");
-
-    init_syscalls();
-
-    print("[7] Syscalls initialized...\n");
-
+static void spawn_initial_processes(void)
+{
     if (create_user_process("/bin/init") == NULL)
     {
         print("[!] ERROR: failed to load /bin/init\n");
@@ -211,6 +188,46 @@ void kmain(void)
     {
         print("[8] /bin/cat loaded, switching to Ring 3...\n");
     }
+}
+
+/**
+ * @brief Main kernel entry point.
+ */
+void kmain(void)
+{
+    init_gdt();
+    init_idt();
+
+    if (LIMINE_BASE_REVISION_SUPPORTED(limine_base_revision) == false)
+    {
+        hcf();
+    }
+
+    init_display();
+    init_serial();
+
+    init_pmm();
+    print("[0] PMM Initialized\n");
+
+    init_vmm();
+    print("[1] VMM Initialized.\n");
+
+    init_apic_timer();
+
+    print("[4] Slab Allocator kmalloc online.\n");
+    init_slab();
+    init_scheduler();
+
+    run_slab_smoke_test();
+    mount_initramfs();
+
+    init_keyboard();
+    print("[6] IRQ1 keyboard listening...\n");
+
+    init_syscalls();
+    print("[7] Syscalls initialized...\n");
+
+    spawn_initial_processes();
 
     schedule();
 
