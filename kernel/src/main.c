@@ -62,8 +62,10 @@ static void hcf(void)
     }
 }
 
-// Finds the loaded Limine module whose path ends with `suffix` (e.g. an
-// initramfs image bundled by name). Returns NULL if no module matches.
+/**
+ * @brief Finds the loaded Limine module whose path ends with the specified suffix.
+ * Returns NULL if no module matches.
+ */
 static struct limine_file *find_module_by_suffix(
     struct limine_module_response *modules, const char *suffix)
 {
@@ -85,8 +87,10 @@ static struct limine_file *find_module_by_suffix(
     return NULL;
 }
 
-// Sets up the framebuffer-backed renderer and loads the boot font. Halts on
-// any missing Limine response, since there is no fallback display path.
+/**
+ * @brief Initializes the display by setting up the framebuffer-backed renderer and loading the boot font.
+ * Halts the system if the framebuffer or font cannot be loaded.
+ */
 static void init_display(void)
 {
     if (framebuffer_request.response == NULL ||
@@ -98,7 +102,7 @@ static void init_display(void)
     struct limine_framebuffer *framebuffer =
         framebuffer_request.response->framebuffers[0];
 
-    FrameBuffer f;
+    static FrameBuffer f;
     f.base_address = framebuffer->address;
     f.width = framebuffer->width;
     f.height = framebuffer->height;
@@ -118,6 +122,10 @@ static void init_display(void)
     init_renderer(global_renderer, &f, &psf);
 }
 
+/**
+ * @brief Initializes the APIC timer and routes IRQs appropriately.
+ * Prints status messages indicating the success or failure of APIC initialization.
+ */
 static void init_apic_timer(void)
 {
     init_apic();
@@ -139,6 +147,10 @@ static void init_apic_timer(void)
     print("[3] IRQ0 PIT Timer calibration started.\n");
 }
 
+/**
+ * @brief Runs a basic smoke test for the slab allocator using dynamic kmalloc and kfree.
+ * Prints status messages indicating the success or failure of the test.
+ */
 static void run_slab_smoke_test(void)
 {
     print("[-] Running slab test with dynamic kmalloc.\n");
@@ -153,6 +165,91 @@ static void run_slab_smoke_test(void)
     }
 }
 
+/**
+ * @brief Builds a synthetic zombie process_t and links it into process_queue
+ * as a child of `parent`, without touching the MLFQ ready queues.
+ * Mirrors the fields wait_reap_child()/reap_zombies() actually look at:
+ * pid, parent, state, exit_code, kernel_stack, cr3.
+ */
+static process_t *make_test_zombie(process_t *parent, uint64_t pid,
+                                   int exit_code)
+{
+    process_t *proc = (process_t *)kmalloc(sizeof(process_t));
+    memset(proc, 0, sizeof(process_t));
+
+    void *stack_phys = pmm_alloc_page();
+    proc->kernel_stack = (void *)((uint64_t)stack_phys + hhdm_offset);
+    proc->pid = pid;
+    proc->parent = parent;
+    proc->state = PROCESS_DEAD;
+    proc->exit_code = exit_code;
+    proc->cr3 = (uint64_t)vmm_get_kernel_pml4() - hhdm_offset;
+
+    proc->prev = process_queue->prev;
+    proc->next = process_queue;
+    process_queue->prev->next = proc;
+    process_queue->prev = proc;
+
+    return proc;
+}
+
+/**
+ * @brief Smoke test for wait_reap_child(): reaps two synthetic dead
+ * children one at a time, then confirms ECHILD once the parent has none
+ * left. Runs before any real user process exists so it can't race the
+ * scheduler or step on a real zombie.
+ */
+static void run_wait_smoke_test(void)
+{
+    print("[-] Running SYS_wait smoke test.\n");
+
+    process_t *parent = current_process;
+    process_t *child_a = make_test_zombie(parent, 9001, 7);
+    process_t *child_b = make_test_zombie(parent, 9002, 42);
+    // Capture pids up front: wait_reap_child() kfree()s the reaped process_t,
+    // and kfree() overwrites the chunk's first 8 bytes (the pid field) with
+    // its free-list pointer, so reading child_a/child_b->pid after reaping
+    // them is a use-after-free that returns garbage, not the original pid.
+    uint64_t child_a_pid = child_a->pid;
+    uint64_t child_b_pid = child_b->pid;
+
+    int status = -1;
+    int reaped = wait_reap_child(parent, child_a_pid, &status);
+    if (reaped == (int)child_a_pid && status == 7)
+    {
+        print("[-] wait_reap_child: reaped specific pid with correct exit code.\n");
+    }
+    else
+    {
+        print("[!] ERROR: wait_reap_child pid-specific reap failed.\n");
+    }
+
+    status = -1;
+    reaped = wait_reap_child(parent, 0, &status);
+    if (reaped == (int)child_b_pid && status == 42)
+    {
+        print("[-] wait_reap_child: reaped remaining child with pid<=0.\n");
+    }
+    else
+    {
+        print("[!] ERROR: wait_reap_child any-child reap failed.\n");
+    }
+
+    reaped = wait_reap_child(parent, 0, &status);
+    if (reaped == -1)
+    {
+        print("[-] wait_reap_child: correctly returned ECHILD once childless.\n");
+    }
+    else
+    {
+        print("[!] ERROR: wait_reap_child should have returned ECHILD.\n");
+    }
+}
+
+/**
+ * @brief Mounts and initializes the initramfs from the Limine module.
+ * Prints status messages indicating success or failure.
+ */
 static void mount_initramfs(void)
 {
     struct limine_file *initramfs_mod = find_module_by_suffix(
@@ -169,6 +266,10 @@ static void mount_initramfs(void)
     }
 }
 
+/**
+ * @brief Spawns the initial user-space processes, such as /bin/init and /bin/cat.
+ * Prints status messages indicating success or failure for each process.
+ */
 static void spawn_initial_processes(void)
 {
     if (create_user_process("/bin/init") == NULL)
@@ -192,6 +293,8 @@ static void spawn_initial_processes(void)
 
 /**
  * @brief Main kernel entry point.
+ * Initializes essential subsystems, mounts the initramfs, and spawns initial user-space processes.
+ * Enters the scheduler and halts if no runnable process exists.
  */
 void kmain(void)
 {
@@ -219,6 +322,9 @@ void kmain(void)
     init_scheduler();
 
     run_slab_smoke_test();
+
+    run_wait_smoke_test();
+
     mount_initramfs();
 
     init_keyboard();
@@ -228,6 +334,7 @@ void kmain(void)
     print("[7] Syscalls initialized...\n");
 
     spawn_initial_processes();
+
 
     schedule();
 

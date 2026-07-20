@@ -166,7 +166,29 @@ process_t *create_user_process(const char *path);
  * that are in the PROCESS_DEAD state and have no parent (orphaned).
  * It does not free resources of processes that are still running or have a parent.
  */
+
+/**
+ * @brief Looks for a dead child of `parent` and reaps it if found.
+ * If `pid` is <= 0, any dead child matches; otherwise only that pid.
+ * On a match, copies the child's exit code to `*status_out` (if non-NULL),
+ * unlinks and frees the child, and returns its pid.
+ * Returns 0 if `parent` has live children but none are dead yet (caller
+ * should block and retry), or -1 if `parent` has no children at all (ECHILD).
+ * @param parent The waiting process.
+ * @param pid The pid to wait for, or <= 0 for any child.
+ * @param status_out Out-param for the reaped child's exit code.
+ * @return The reaped child's pid, 0, or -1.
+ */
+int wait_reap_child(process_t *parent, int64_t pid, int *status_out);
+
 extern process_t *current_process;
+
+/**
+ * @brief Circular doubly-linked ring of every live and zombie process.
+ * Built by enqueue_process()/create_user_process(); reap_zombies() and
+ * wait_reap_child() are the only readers outside process.c.
+ */
+extern process_t *process_queue;
 
 /**
  * @brief Pointer to the idle process.
