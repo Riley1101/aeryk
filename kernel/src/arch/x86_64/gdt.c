@@ -53,6 +53,12 @@ void init_gdt()
     tss_flush();
 }
 
+/**
+ * @brief Writes a Task State Segment (TSS) descriptor into the GDT.
+ * 
+ * @param num The index in the GDT where the TSS descriptor will be written.
+ * @param rsp0 The stack pointer for ring 0 (kernel) to be set in the TSS.
+ */
 void write_tss(uint32_t num, uint64_t rsp0)
 {
     uint64_t base = (uint64_t)&tss_entry;
@@ -74,14 +80,29 @@ void write_tss(uint32_t num, uint64_t rsp0)
     tss_entry.iomap_base = sizeof(struct tss_entry_struct);
 }
 
+/**
+ * @brief Sets the stack pointer for ring 0 (kernel) in the Task State Segment (TSS).
+ * 
+ * @param rsp0 The stack pointer value to set for ring 0.
+ */
 void set_kernel_stack(uint64_t rsp0)
 {
     tss_entry.rsp0 = rsp0;
 }
 
+/**
+ * @brief Sets a GDT entry at the specified index with the given parameters.
+ * 
+ * @param num The index in the GDT where the entry will be set.
+ * @param base The base address for the segment.
+ * @param limit The limit for the segment.
+ * @param access The access flags for the segment.
+ * @param gran The granularity flags for the segment.
+ */
 void set_gdt_gate(uint32_t num, uint32_t base, uint32_t limit, uint8_t access, uint8_t gran)
 {
     gdt_entries[num].base_low = (base & 0xFFFF);
+
     gdt_entries[num].base_middle = (base >> 16) & 0xFF;
     gdt_entries[num].base_high = (base >> 24) & 0xFF;
 

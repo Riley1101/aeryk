@@ -307,7 +307,10 @@ void kmain(void)
     }
 
     init_display();
+    print("[-] Display initialized.\n");
+
     init_serial();
+    print("[-] Serial initialized.\n");
 
     init_pmm();
     print("[0] PMM Initialized\n");
@@ -316,10 +319,13 @@ void kmain(void)
     print("[1] VMM Initialized.\n");
 
     init_apic_timer();
-
     print("[4] Slab Allocator kmalloc online.\n");
+
     init_slab();
+    print("[-] Slab Allocator initialized.\n");
+
     init_scheduler();
+    print("[5] Scheduler initialized.\n");
 
     run_slab_smoke_test();
 

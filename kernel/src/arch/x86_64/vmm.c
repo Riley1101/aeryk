@@ -6,6 +6,14 @@
 
 static uint64_t *kernel_pml4 = NULL;
 
+/**
+ * @brief Retrieves the next level of the page table for a given entry index.
+ * If the entry is present, it returns the virtual address of the next level.
+ * If the entry is not present, it allocates a new page for the next level, initializes it to zero, and updates the current level's entry to point to the new page with the appropriate flags.
+ * @param current_level Pointer to the current level of the page table (PML4, PDPT, or PD).
+ * @param entry_index The index of the entry in the current level
+ * @return Pointer to the next level of the page table, or NULL if allocation fails.
+ */
 static void *get_next_level(uint64_t *current_level, size_t entry_index) {
 
   if ((current_level[entry_index] & PTE_PRESENT) != 0) {
@@ -27,6 +35,13 @@ static void *get_next_level(uint64_t *current_level, size_t entry_index) {
   return next_level_virt;
 }
 
+/**
+ * @brief Maps a virtual address to a physical address in the specified PML4 with the given flags.
+ * @param pml4 Pointer to the PML4 table.
+ * @param virtual_addr The virtual address to map.
+ * @param physical_addr The physical address to map to.
+ * @param flags The flags to set for the page table entry (e.g., PTE
+ */
 void vmm_map_page(uint64_t *pml4, uint64_t virtual_addr, uint64_t physical_addr,
                   uint64_t flags) {
 
@@ -50,10 +65,14 @@ void vmm_map_page(uint64_t *pml4, uint64_t virtual_addr, uint64_t physical_addr,
   pt[pt_entry] = physical_addr | flags;
 }
 
-// Marks every level of the page-table walk for virtual_addr as
-// user-accessible, without touching the existing physical
-// addresses or other flags. Used to let ring-3 code/stack live on
-// pages that were originally mapped supervisor-only by Limine.
+/**
+ * @brief Marks every level of the page-table walk for virtual_addr as
+ * user-accessible. This do notes not modify the existing physical addresses or other flags. It is used to allow ring-3 
+ * code/stack to reside on pages that were originally mapped as supervisor-only by Limine.
+ *
+ * @param pml4 Pointer to the PML4 table.
+ * @param virtual_addr The virtual address to mark as user-accessible.
+ */
 void vmm_set_page_user(uint64_t *pml4, uint64_t virtual_addr) {
   size_t pml4_entry = (virtual_addr >> 39) & 0x1FF;
   size_t pdpt_entry = (virtual_addr >> 30) & 0x1FF;
@@ -83,8 +102,20 @@ void vmm_set_page_user(uint64_t *pml4, uint64_t virtual_addr) {
   pt[pt_entry] |= PTE_USER;
 }
 
+/**
+ * @brief Retrieves the kernel's PML4 table, which is stored in a global variable after initialization.
+ * @return Pointer to the kernel's PML4 table.
+ */
 uint64_t *vmm_get_kernel_pml4(void) { return kernel_pml4; }
 
+/**
+ * @brief Allocates a fresh PML4 for a user process. The top half (kernel-space
+ * entries 256-511) is copied from the kernel PML4 so kernel code/data,
+ * HHDM, and the framebuffer stay mapped regardless of which process's
+ * pagetable is active. The bottom half is left empty for the loader to
+ * populate with the process's segments and stack. Returns the PML4's
+ * HHDM virtual address, or NULL on allocation failure.
+ */
 uint64_t *vmm_new_user_pagetable(void) {
   void *phys = pmm_alloc_page();
   if (!phys) {
@@ -103,6 +134,13 @@ uint64_t *vmm_new_user_pagetable(void) {
   return pml4;
 }
 
+/**
+ * @brief Frees every physical frame mapped in the user half (entries 0-255) of
+ * pml4, including the intermediate PDPT/PD/PT structure pages themselves,
+ * then frees the pml4 page. Safe to call on a partially-populated pagetable
+ * (e.g. after a failed elf_load), since unmapped entries are simply skipped.
+ * Does not touch the shared kernel half (entries 256-511).
+ */
 void vmm_destroy_user_pagetable(uint64_t *pml4) {
   if (!pml4) {
     return;
@@ -145,6 +183,10 @@ void vmm_destroy_user_pagetable(uint64_t *pml4) {
   pmm_free_page((void *)((uint64_t)pml4 - hhdm_offset));
 }
 
+/**
+ * @brief Initializes the virtual memory manager by retrieving the kernel's PML4
+ * from the CR3 register and storing it in a global variable for later use.
+ */
 void init_vmm(void) {
   uint64_t cr3;
   asm volatile("mov %%cr3, %0" : "=r"(cr3));

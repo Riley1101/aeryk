@@ -4,6 +4,14 @@
 
 Renderer *global_renderer;
 
+/**
+ * @brief Initializes the renderer with the specified framebuffer and PSF1 font.
+ * Sets the initial cursor position and color.
+ * @param renderer Pointer to the Renderer structure to initialize.
+ * @param framebuffer Pointer to the FrameBuffer structure representing the display.
+ * @param psf1_font Pointer to the PSF1_FONT structure representing the font to use for rendering text.
+ * @return void
+ */
 void init_renderer(Renderer *renderer, FrameBuffer *framebuffer,
                    struct PSF1_FONT *psf1_font) {
   renderer->color = FG;
@@ -16,6 +24,11 @@ void init_renderer(Renderer *renderer, FrameBuffer *framebuffer,
   return;
 }
 
+/**
+ * @brief Prints a string to the screen.
+ * @param str The string to print.
+ * @return void
+ */
 void print(const char *str) {
   char *chr = (char *)str;
   while (*chr != 0) {
@@ -50,7 +63,12 @@ void print(const char *str) {
   return;
 }
 
-// TODO! Chr is unused for now
+/**
+ * @brief Prints a string to the screen with a specified color.
+ * @param str The string to print.
+ * @param color The color to use for the text.
+ * @return void
+ */
 void put_char(Renderer *renderer, char chr, unsigned int xOff,
               unsigned int yOff) {
   unsigned int *pixPtr = (unsigned int *)renderer->framebuffer->base_address;
@@ -71,6 +89,14 @@ void put_char(Renderer *renderer, char chr, unsigned int xOff,
   return;
 }
 
+/**
+ * @brief Clears the screen by filling the framebuffer with a specified color.
+ * Optionally resets the cursor position to the top-left corner.
+ * @param renderer Pointer to the Renderer structure.
+ * @param color The color to fill the screen with.
+ * @param resetCursor If true, resets the cursor position to (0, 0).
+ * @return void
+ */
 void clear(Renderer *renderer, uint32_t color, bool resetCursor) {
   uint64_t fbBase = (uint64_t)renderer->framebuffer->base_address;
   uint64_t pxlsPerScanline = renderer->framebuffer->pixels_per_scan_line;

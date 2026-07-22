@@ -44,4 +44,12 @@ int close(int fd);
  */
 int spawn(const char *path);
 
+/**
+ * @brief Waits for a child process to terminate.
+ * @param pid The process ID of the child to wait for.
+ * @param status A pointer to an integer where the exit status will be stored.
+ * @return Returns the pid of the terminated child or -1 on error.
+ */
+int wait(int pid, int *status);
+
 #endif // !_UNISTD_H
