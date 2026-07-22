@@ -123,12 +123,6 @@ int keyboard_read(char *buf, int count) {
       continue;
     }
 
-    if (n > 0) {
-      // Already have data this call; return it instead of blocking for more.
-      asm volatile("sti");
-      break;
-    }
-
     // Nothing buffered: register as a waiter and yield. cli/sti around the
     // empty-check + enqueue close the race against on_irq1 firing in between
     // (a wakeup there just re-readies us before schedule() switches away).

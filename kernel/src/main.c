@@ -272,7 +272,7 @@ static void mount_initramfs(void)
  */
 static void spawn_initial_processes(void)
 {
-    if (create_user_process("/bin/init") == NULL)
+    if (create_user_process("/bin/init", NULL) == NULL)
     {
         print("[!] ERROR: failed to load /bin/init\n");
     }
@@ -281,13 +281,22 @@ static void spawn_initial_processes(void)
         print("[8] /bin/init loaded, switching to Ring 3...\n");
     }
 
-    if (create_user_process("/bin/cat") == NULL)
+    if (create_user_process("/bin/cat", NULL) == NULL)
     {
         print("[!] ERROR: failed to load /bin/cat\n");
     }
     else
     {
         print("[8] /bin/cat loaded, switching to Ring 3...\n");
+    }
+
+    if (create_user_process("/bin/sh", NULL) == NULL)
+    {
+        print("[!] ERROR: failed to load /bin/sh\n");
+    }
+    else
+    {
+        print("[8] /bin/sh loaded, switching to Ring 3...\n");
     }
 }
 
@@ -340,7 +349,6 @@ void kmain(void)
     print("[7] Syscalls initialized...\n");
 
     spawn_initial_processes();
-
 
     schedule();
 

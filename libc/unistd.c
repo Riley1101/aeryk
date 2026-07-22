@@ -64,13 +64,15 @@ int close(int fd) {
 /**
  * @brief Spawns a new user process from an executable path.
  * @param path The path to the executable.
+ * @param args Optional space-separated argument string (excluding the
+ * program name), or NULL for no arguments.
  * @return Returns the pid of the new process or -1 on error.
  */
-int spawn(const char *path) {
+int spawn(const char *path, const char *args) {
   long ret;
   asm volatile("syscall"
                 : "=a"(ret)
-                : "0"(SYS_spawn), "D"(path)
+                : "0"(SYS_spawn), "D"(path), "S"(args)
                 : "rcx", "r11", "memory");
   return (int)ret;
 }
@@ -88,6 +90,22 @@ int wait (int pid, int *status) {
                 : "0"(SYS_wait), "D"(pid), "S"(status)
                 : "rcx", "r11", "memory");
   return (int)ret;
+}
+
+/**
+ * @brief Lists the entries of a directory into a buffer.
+ * @param path The path to the directory.
+ * @param buf Destination buffer.
+ * @param size The size of buf.
+ * @return The number of bytes written, or -1 if path is not a directory.
+ */
+ssize_t listdir(const char *path, char *buf, size_t size) {
+  long ret;
+  asm volatile("syscall"
+                : "=a"(ret)
+                : "0"(SYS_readdir), "D"(path), "S"(buf), "d"(size)
+                : "rcx", "r11", "memory");
+  return ret;
 }
 
 

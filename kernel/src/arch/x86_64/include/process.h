@@ -156,9 +156,12 @@ process_t *create_kernel_thread(void (*entry_point)());
  * Returns NULL if the file is missing, not a valid ELF64 executable,
  * or allocation fails.
  * @param path The path to the ELF executable in the virtual file system (VFS).
+ * @param args_str Optional space-separated argument string (excluding the
+ * program name), or NULL/empty for no arguments. argv[0] is derived from
+ * the last path component of `path`.
  * @return A pointer to the newly created process, or NULL on failure.
  */
-process_t *create_user_process(const char *path);
+process_t *create_user_process(const char *path, const char *args_str);
 
 /**
  * @brief Reclaims resources of dead processes.

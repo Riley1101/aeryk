@@ -232,6 +232,124 @@ process_t *create_kernel_thread(void (*entrypoint)())
 }
 
 #define USER_STACK_TOP 0x0000700000000000ULL
+#define MAX_USER_ARGS 8
+
+/**
+ * @brief Returns the last path component of `path` (e.g. "/bin/cat" -> "cat").
+ */
+static const char *basename_of(const char *path)
+{
+    const char *base = path;
+    for (const char *p = path; *p; p++)
+    {
+        if (*p == '/')
+        {
+            base = p + 1;
+        }
+    }
+    return base;
+}
+
+/**
+ * @brief Lays out argv[0] (derived from the executable path) and any
+ * space-separated tokens from `args_str` at the top of a freshly mapped
+ * user stack page, following the convention crt0.asm expects: the initial
+ * RSP points at a packed [argc][argv] pair, where argv points at a
+ * NULL-terminated array of pointers into the argument strings, all of
+ * which live below that array on the same page.
+ *
+ * Writes through `stack_hhdm_base`, the kernel (HHDM) alias of the same
+ * physical page mapped into the user pagetable at
+ * [`stack_vaddr_base`, `stack_vaddr_base` + PAGE_SIZE). Returns the
+ * resulting user-visible stack pointer, or 0 if the arguments don't fit
+ * in one page.
+ * @param stack_hhdm_base Kernel-accessible base address of the stack page.
+ * @param stack_vaddr_base User-visible virtual base address of the stack page.
+ * @param argv0 The value for argv[0].
+ * @param args_str Optional space-separated remaining arguments, or NULL.
+ * @return The initial user stack pointer, or 0 on failure (arguments too large).
+ */
+static uint64_t setup_user_stack_args(void *stack_hhdm_base,
+                                      uint64_t stack_vaddr_base,
+                                      const char *argv0,
+                                      const char *args_str)
+{
+    const char *tokens[MAX_USER_ARGS];
+    size_t token_lens[MAX_USER_ARGS];
+    int argc = 0;
+
+    tokens[argc] = argv0;
+    token_lens[argc] = strlen(argv0);
+    argc++;
+
+    if (args_str)
+    {
+        const char *p = args_str;
+        while (*p && argc < MAX_USER_ARGS)
+        {
+            while (*p == ' ')
+            {
+                p++;
+            }
+            if (!*p)
+            {
+                break;
+            }
+            const char *start = p;
+            while (*p && *p != ' ')
+            {
+                p++;
+            }
+            tokens[argc] = start;
+            token_lens[argc] = (size_t)(p - start);
+            argc++;
+        }
+    }
+
+    uint64_t cur = stack_vaddr_base + PAGE_SIZE;
+    uint64_t str_vaddrs[MAX_USER_ARGS];
+
+    for (int i = 0; i < argc; i++)
+    {
+        uint64_t len = token_lens[i] + 1;
+        if (cur - stack_vaddr_base < len)
+        {
+            return 0;
+        }
+        cur -= len;
+        char *dst = (char *)stack_hhdm_base + (cur - stack_vaddr_base);
+        memcpy(dst, tokens[i], token_lens[i]);
+        dst[token_lens[i]] = '\0';
+        str_vaddrs[i] = cur;
+    }
+
+    cur &= ~(uint64_t)7;
+
+    uint64_t arr_size = (uint64_t)(argc + 1) * 8;
+    if (cur - stack_vaddr_base < arr_size)
+    {
+        return 0;
+    }
+    cur -= arr_size;
+    uint64_t argv_vaddr = cur;
+    uint64_t *argv_arr = (uint64_t *)((char *)stack_hhdm_base + (cur - stack_vaddr_base));
+    for (int i = 0; i < argc; i++)
+    {
+        argv_arr[i] = str_vaddrs[i];
+    }
+    argv_arr[argc] = 0;
+
+    if (cur - stack_vaddr_base < 16)
+    {
+        return 0;
+    }
+    cur -= 16;
+    uint64_t *header = (uint64_t *)((char *)stack_hhdm_base + (cur - stack_vaddr_base));
+    header[0] = (uint64_t)argc;
+    header[1] = argv_vaddr;
+
+    return cur;
+}
 
 /**
  * @brief Creates a new user process from an ELF executable.
@@ -240,9 +358,11 @@ process_t *create_kernel_thread(void (*entrypoint)())
  * Returns NULL if the file is missing, not a valid ELF64 executable,
  * or allocation fails.
  * @param path The path to the ELF executable in the virtual file system (VFS).
+ * @param args_str Optional space-separated argument string (excluding the
+ * program name), or NULL/empty for no arguments.
  * @return A pointer to the newly created process, or NULL on failure.
  */
-process_t *create_user_process(const char *path)
+process_t *create_user_process(const char *path, const char *args_str)
 {
     vfs_node_t *file = vfs_find_node(vfs_root, path);
     if (!file || file->type != VFS_FILE)
@@ -272,6 +392,15 @@ process_t *create_user_process(const char *path)
     vmm_map_page(pml4, USER_STACK_TOP - PAGE_SIZE, (uint64_t)user_stack_phys,
                  PTE_PRESENT | PTE_WRITABLE | PTE_USER | PTE_NX);
 
+    void *stack_hhdm_base = (void *)((uint64_t)user_stack_phys + hhdm_offset);
+    uint64_t initial_rsp = setup_user_stack_args(
+        stack_hhdm_base, USER_STACK_TOP - PAGE_SIZE, basename_of(path), args_str);
+    if (initial_rsp == 0)
+    {
+        vmm_destroy_user_pagetable(pml4);
+        return NULL;
+    }
+
     process_t *proc = (process_t *)kmalloc(sizeof(process_t));
     if (!proc)
     {
@@ -292,7 +421,7 @@ process_t *create_user_process(const char *path)
     proc->pid = next_pid++;
     proc->state = PROCESS_READY;
     proc->entry = entry;
-    proc->user_stack_top = USER_STACK_TOP;
+    proc->user_stack_top = initial_rsp;
     proc->cr3 = (uint64_t)pml4 - hhdm_offset;
     proc->parent = current_process;
 

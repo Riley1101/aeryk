@@ -15,6 +15,8 @@ A x86_64 kernel written in C, booted via the [Limine](https://codeberg.org/Limin
 | May 2026 | Slab allocator                          |
 | Jun 2026 | MLFQ & Process                          |
 | Jun 2026 | Serial driver                           |
+| Jul 2026 | Syscalls: spawn/wait, libc wrappers     |
+| Jul 2026 | Userland shell (sh)                     |
 
 ## Progress
 
@@ -32,19 +34,26 @@ A x86_64 kernel written in C, booted via the [Limine](https://codeberg.org/Limin
 - [x] Serial driver (not complete one, just for debugging instructions to GDB)
 - [x] Syscall interface
   -  [x] sys_write and sys_exit
+  -  [x] sys_open, sys_read, sys_close
+  -  [x] sys_spawn and sys_wait
   -  [x] Context switching with MLFQ 
 - [x] Initramfs 
 - [x] Filesystem (VFS)
 - [x] Elf loader 
-- [ ] libc wrapper for syscalls
-    -  [ ] Some fun libc Programs
+- [x] libc wrapper for syscalls
+    -  [x] Some fun libc Programs (init, cat, sh)
 - [ ] Input and IPC
+    -  [x] Keyboard wired to sys_read (fd 0, blocking, line-buffered)
+    -  [ ] Pipes / IPC between processes
 - [ ] Compositor
 
 
 
 ## Libc Notes
 - [x] string.c
+- [x] stdio.c (printf, putchar, puts)
+- [x] unistd.c (open/read/write/close/spawn/wait)
+- [x] stdlib.c (exit)
 
 ## Build
 

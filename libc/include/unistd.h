@@ -40,9 +40,11 @@ int close(int fd);
 /**
  * @brief Spawns a new user process from an executable path.
  * @param path The path to the executable.
+ * @param args Optional space-separated argument string (excluding the
+ * program name), or NULL for no arguments.
  * @return Returns the pid of the new process or -1 on error.
  */
-int spawn(const char *path);
+int spawn(const char *path, const char *args);
 
 /**
  * @brief Waits for a child process to terminate.
@@ -51,5 +53,16 @@ int spawn(const char *path);
  * @return Returns the pid of the terminated child or -1 on error.
  */
 int wait(int pid, int *status);
+
+/**
+ * @brief Lists the entries of a directory into a buffer.
+ * Each entry is written as its name followed by '\n', with a trailing
+ * '/' appended for subdirectories.
+ * @param path The path to the directory.
+ * @param buf Destination buffer.
+ * @param size The size of buf.
+ * @return The number of bytes written, or -1 if path is not a directory.
+ */
+ssize_t listdir(const char *path, char *buf, size_t size);
 
 #endif // !_UNISTD_H

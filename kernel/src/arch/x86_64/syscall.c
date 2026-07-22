@@ -139,10 +139,61 @@ void syscall_handler_c(struct syscall_frame *frame)
             break;
         }
 
-        process_t *child = create_user_process(path);
+        const char *user_args = (const char *)frame->rsi;
+        char args[128];
+        const char *args_ptr = NULL;
+        if (user_args)
+        {
+            size_t j = 0;
+            for (; j < sizeof(args) - 1 && user_args[j] != '\0'; j++)
+            {
+                args[j] = user_args[j];
+            }
+            args[j] = '\0';
+            args_ptr = args;
+        }
+
+        process_t *child = create_user_process(path, args_ptr);
         // If the process creation fails, return -1
         // Otherwise, return the PID of the newly created process
         frame->rax = child ? (int64_t)child->pid : -1;
+        break;
+    }
+    case SYS_readdir:
+    {
+        const char *path = (const char *)frame->rdi;
+        char *buf = (char *)frame->rsi;
+        uint32_t bufsize = (uint32_t)frame->rdx;
+
+        vfs_node_t *dir = vfs_find_node(vfs_root, path);
+        if (!dir || dir->type != VFS_DIRECTORY)
+        {
+            frame->rax = -1;
+            break;
+        }
+
+        uint32_t written = 0;
+        for (vfs_node_t *child = dir->children; child; child = child->next)
+        {
+            size_t namelen = strlen(child->name);
+            size_t needed = namelen + 1; // name + '\n' (plus optional '/')
+            if (child->type == VFS_DIRECTORY)
+            {
+                needed++;
+            }
+            if (written + needed > bufsize)
+            {
+                break;
+            }
+            memcpy(buf + written, child->name, namelen);
+            written += namelen;
+            if (child->type == VFS_DIRECTORY)
+            {
+                buf[written++] = '/';
+            }
+            buf[written++] = '\n';
+        }
+        frame->rax = written;
         break;
     }
     case SYS_wait:
