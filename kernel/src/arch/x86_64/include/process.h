@@ -19,6 +19,19 @@ typedef struct file_descriptor {
 ;
 
 /**
+ * @brief Snapshot of a user process's registers at the point it called
+ * fork(), used to resume a freshly forked child exactly where its parent
+ * left off. Field order/offsets are load-bearing: resume_usermode.asm
+ * indexes into this struct directly, so keep the two in sync.
+ */
+typedef struct {
+  uint64_t rdi, rsi, rdx, r10, r8, r9;
+  uint64_t rbx, rbp, r12, r13, r14, r15;
+  uint64_t rax;
+  uint64_t rip, rflags, rsp;
+} trapframe_t;
+
+/**
  * @brief Enumeration representing the possible states of a process.
  */
 typedef enum {
@@ -124,6 +137,13 @@ typedef struct process {
 
   file_descriptor_t fd_table[MAX_FDS];
 
+  /**
+   * @brief Saved user-mode register snapshot for a forked child's first
+   * run. Only populated (by fork_process()) on a process created via
+   * fork(); fork_trampoline() consumes it once, on first schedule.
+   */
+  trapframe_t fork_frame;
+
   // -- Parent/child + exit status --
   struct process *parent;
 
@@ -162,6 +182,18 @@ process_t *create_kernel_thread(void (*entry_point)());
  * @return A pointer to the newly created process, or NULL on failure.
  */
 process_t *create_user_process(const char *path, const char *args_str);
+
+/**
+ * @brief Forks the currently running user process.
+ * Deep-copies `parent`'s address space and file descriptor table into a
+ * new process, and arranges for it to resume in user mode at the exact
+ * point captured in `regs` (the parent's register state when it invoked
+ * the fork syscall), except with a return value of 0.
+ * @param parent The process being forked (must be a user process).
+ * @param regs The parent's user-mode register snapshot at the syscall.
+ * @return A pointer to the newly created child process, or NULL on failure.
+ */
+process_t *fork_process(process_t *parent, const trapframe_t *regs);
 
 /**
  * @brief Reclaims resources of dead processes.

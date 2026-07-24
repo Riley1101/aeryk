@@ -18,6 +18,16 @@ syscall_entry:
   mov rsp, [rel kernel_rsp_scratch]
 
   ; build syscall frame
+  ; Save callee-saved registers first so fork() can capture the caller's
+  ; full context; the C ABI already preserves these across the call to
+  ; syscall_handler_c, so they never need popping back before sysret.
+  push rbx
+  push rbp
+  push r12
+  push r13
+  push r14
+  push r15
+
   push rcx ; Save user RIP
   push r11 ; Save user RFLAGs
   push qword [rel user_rsp_scratch] ; save user RSP
@@ -51,6 +61,3 @@ syscall_entry:
   mov rsp, [rsp] ; user RSP
 
   o64 sysret
-
-
-

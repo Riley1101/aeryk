@@ -437,6 +437,75 @@ process_t *create_user_process(const char *path, const char *args_str)
 }
 
 /**
+ * @brief Restores the register snapshot captured at fork() time and lands
+ * the child in user mode via resume_usermode() (implemented in
+ * resume_usermode.asm). This is the `stub` a forked child's kernel stack
+ * is primed with, so it is where execution begins the first time the
+ * scheduler switches to it.
+ */
+extern void resume_usermode(trapframe_t *tf) __attribute__((noreturn));
+
+static void fork_trampoline(void)
+{
+    __asm__ volatile("sti");
+    resume_usermode(&current_process->fork_frame);
+}
+
+/**
+ * @brief Forks the currently running user process.
+ * Deep-copies `parent`'s address space and file descriptor table into a
+ * new process, and arranges for it to resume in user mode at the exact
+ * point captured in `regs`, except with a return value of 0.
+ */
+process_t *fork_process(process_t *parent, const trapframe_t *regs)
+{
+    uint64_t *child_pml4 =
+        vmm_clone_user_pagetable((uint64_t *)(parent->cr3 + hhdm_offset));
+    if (!child_pml4)
+    {
+        return NULL;
+    }
+
+    process_t *child = (process_t *)kmalloc(sizeof(process_t));
+    if (!child)
+    {
+        vmm_destroy_user_pagetable(child_pml4);
+        return NULL;
+    }
+    memset(child, 0, sizeof(process_t));
+
+    void *kernel_stack_phys = pmm_alloc_page();
+    if (!kernel_stack_phys)
+    {
+        kfree(child);
+        vmm_destroy_user_pagetable(child_pml4);
+        return NULL;
+    }
+    child->kernel_stack = (void *)((uint64_t)kernel_stack_phys + hhdm_offset);
+
+    child->pid = next_pid++;
+    child->state = PROCESS_READY;
+    child->entry = parent->entry;
+    child->user_stack_top = parent->user_stack_top;
+    child->cr3 = (uint64_t)child_pml4 - hhdm_offset;
+    child->parent = parent;
+    memcpy(child->fd_table, parent->fd_table, sizeof(child->fd_table));
+
+    child->fork_frame = *regs;
+    child->fork_frame.rax = 0; // fork() returns 0 in the child
+
+    // when fork_trampoline returns (it shouldn't), land here instead of 0
+    child->rsp = setup_kernel_stack(child->kernel_stack, fork_trampoline);
+
+    enqueue_process(child);
+
+    child->priority = 0;
+    child->ticks_executed = 0;
+    mlfq_enqueue(child);
+    return child;
+}
+
+/**
  * @brief Reclaims resources of dead processes.
  * This function walks the process queue and frees resources of processes
  * that are in the PROCESS_DEAD state and have no parent (orphaned).

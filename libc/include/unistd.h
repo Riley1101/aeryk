@@ -47,6 +47,14 @@ int close(int fd);
 int spawn(const char *path, const char *args);
 
 /**
+ * @brief Forks the calling process, creating a near-identical copy that
+ * resumes right after this call.
+ * @return Returns 0 in the child, the child's pid in the parent, or -1 on
+ * error.
+ */
+int fork(void);
+
+/**
  * @brief Waits for a child process to terminate.
  * @param pid The process ID of the child to wait for.
  * @param status A pointer to an integer where the exit status will be stored.

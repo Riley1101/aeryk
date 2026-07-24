@@ -17,6 +17,7 @@
 #define SYS_spawn 4
 #define SYS_wait 5
 #define SYS_readdir 6
+#define SYS_fork 57
 #define SYS_exit 60
 
 #endif // !_ABI_SYSCALL_H

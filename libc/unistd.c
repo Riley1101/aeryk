@@ -78,6 +78,20 @@ int spawn(const char *path, const char *args) {
 }
 
 /**
+ * @brief Forks the calling process.
+ * @return Returns 0 in the child, the child's pid in the parent, or -1 on
+ * error.
+ */
+int fork(void) {
+  long ret;
+  asm volatile("syscall"
+                : "=a"(ret)
+                : "0"(SYS_fork)
+                : "rcx", "r11", "memory");
+  return (int)ret;
+}
+
+/**
  * @brief Waits for a child process to terminate.
  * @param pid The process ID of the child to wait for.
  * @param status A pointer to an integer where the exit status will be stored.

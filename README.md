@@ -37,6 +37,7 @@ A x86_64 kernel written in C, booted via the [Limine](https://codeberg.org/Limin
   -  [x] sys_open, sys_read, sys_close
   -  [x] sys_spawn and sys_wait
   -  [x] Context switching with MLFQ 
+  -  [ ] fork, clone, execve
 - [x] Initramfs 
 - [x] Filesystem (VFS)
 - [x] Elf loader 
@@ -46,7 +47,6 @@ A x86_64 kernel written in C, booted via the [Limine](https://codeberg.org/Limin
     -  [x] Keyboard wired to sys_read (fd 0, blocking, line-buffered)
     -  [ ] Pipes / IPC between processes
 - [ ] Compositor
-
 
 
 ## Libc Notes
@@ -95,4 +95,3 @@ bear -- make
 ## Sandbox
 
 This is somewhat cleaned repo. A full sandbox is available where I test around is in [oands](https://github.com/Riley1101/oands)
-

@@ -184,6 +184,124 @@ void vmm_destroy_user_pagetable(uint64_t *pml4) {
 }
 
 /**
+ * @brief Copy-on-write clones the user half (entries 0-255) of `src_pml4`
+ * into a freshly allocated pagetable. See vmm.h for the full behavior.
+ * Returns NULL (having freed any partial work) if any allocation along the
+ * way fails.
+ */
+uint64_t *vmm_clone_user_pagetable(uint64_t *src_pml4) {
+  uint64_t *dst_pml4 = vmm_new_user_pagetable();
+  if (!dst_pml4) {
+    return NULL;
+  }
+
+  for (size_t pml4_i = 0; pml4_i < 256; pml4_i++) {
+    if (!(src_pml4[pml4_i] & PTE_PRESENT)) {
+      continue;
+    }
+    uint64_t *src_pdpt =
+        (uint64_t *)((src_pml4[pml4_i] & 0x000FFFFFFFFFF000) + hhdm_offset);
+
+    for (size_t pdpt_i = 0; pdpt_i < 512; pdpt_i++) {
+      if (!(src_pdpt[pdpt_i] & PTE_PRESENT)) {
+        continue;
+      }
+      uint64_t *src_pd =
+          (uint64_t *)((src_pdpt[pdpt_i] & 0x000FFFFFFFFFF000) + hhdm_offset);
+
+      for (size_t pd_i = 0; pd_i < 512; pd_i++) {
+        if (!(src_pd[pd_i] & PTE_PRESENT)) {
+          continue;
+        }
+        uint64_t *src_pt =
+            (uint64_t *)((src_pd[pd_i] & 0x000FFFFFFFFFF000) + hhdm_offset);
+
+        for (size_t pt_i = 0; pt_i < 512; pt_i++) {
+          if (!(src_pt[pt_i] & PTE_PRESENT)) {
+            continue;
+          }
+
+          uint64_t flags = src_pt[pt_i] & 0xFFF0000000000FFF;
+          uint64_t phys = src_pt[pt_i] & 0x000FFFFFFFFFF000;
+
+          if (flags & PTE_WRITABLE) {
+            flags = (flags & ~PTE_WRITABLE) | PTE_COW;
+            src_pt[pt_i] = phys | flags;
+          }
+
+          pmm_page_ref_inc((void *)phys);
+
+          uint64_t virtual_addr = ((uint64_t)pml4_i << 39) |
+                                   ((uint64_t)pdpt_i << 30) |
+                                   ((uint64_t)pd_i << 21) |
+                                   ((uint64_t)pt_i << 12);
+          vmm_map_page(dst_pml4, virtual_addr, phys, flags);
+        }
+      }
+    }
+  }
+
+  // src_pml4 is normally the currently-active address space and entries
+  // in it were just downgraded to read-only in place; flush stale
+  // writable TLB entries by reloading CR3.
+  uint64_t cr3;
+  asm volatile("mov %%cr3, %0" : "=r"(cr3));
+  asm volatile("mov %0, %%cr3" : : "r"(cr3) : "memory");
+
+  return dst_pml4;
+}
+
+/**
+ * @brief Handles a copy-on-write page fault. See vmm.h for the full
+ * behavior.
+ */
+int vmm_handle_cow_fault(uint64_t *pml4, uint64_t fault_vaddr) {
+  size_t pml4_i = (fault_vaddr >> 39) & 0x1FF;
+  size_t pdpt_i = (fault_vaddr >> 30) & 0x1FF;
+  size_t pd_i = (fault_vaddr >> 21) & 0x1FF;
+  size_t pt_i = (fault_vaddr >> 12) & 0x1FF;
+
+  if (!(pml4[pml4_i] & PTE_PRESENT)) {
+    return 0;
+  }
+  uint64_t *pdpt =
+      (uint64_t *)((pml4[pml4_i] & 0x000FFFFFFFFFF000) + hhdm_offset);
+  if (!(pdpt[pdpt_i] & PTE_PRESENT)) {
+    return 0;
+  }
+  uint64_t *pd =
+      (uint64_t *)((pdpt[pdpt_i] & 0x000FFFFFFFFFF000) + hhdm_offset);
+  if (!(pd[pd_i] & PTE_PRESENT)) {
+    return 0;
+  }
+  uint64_t *pt = (uint64_t *)((pd[pd_i] & 0x000FFFFFFFFFF000) + hhdm_offset);
+  if (!(pt[pt_i] & PTE_PRESENT) || !(pt[pt_i] & PTE_COW)) {
+    return 0;
+  }
+
+  uint64_t phys = pt[pt_i] & 0x000FFFFFFFFFF000;
+  uint64_t flags = (pt[pt_i] & 0xFFF0000000000FFF & ~PTE_COW) | PTE_WRITABLE;
+
+  if (pmm_page_refcount((void *)phys) == 1) {
+    // We're the sole remaining owner; no one else can be writing to this
+    // frame, so just reclaim write access in place.
+    pt[pt_i] = phys | flags;
+  } else {
+    void *new_phys = pmm_alloc_page();
+    if (!new_phys) {
+      return 0;
+    }
+    memcpy((void *)((uint64_t)new_phys + hhdm_offset),
+           (void *)(phys + hhdm_offset), PAGE_SIZE);
+    pt[pt_i] = (uint64_t)new_phys | flags;
+    pmm_free_page((void *)phys);
+  }
+
+  asm volatile("invlpg (%0)" : : "r"(fault_vaddr & ~(uint64_t)0xFFF) : "memory");
+  return 1;
+}
+
+/**
  * @brief Initializes the virtual memory manager by retrieving the kernel's PML4
  * from the CR3 register and storing it in a global variable for later use.
  */

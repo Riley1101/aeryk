@@ -24,6 +24,11 @@ struct syscall_frame
     uint64_t user_rsp;
     uint64_t user_rflags;
     uint64_t user_rip;
+    // Callee-saved registers, pushed by syscall_entry purely so fork() can
+    // snapshot the caller's full context. Never restored from here on the
+    // return path: the C ABI already keeps them intact across the call to
+    // syscall_handler_c.
+    uint64_t r15, r14, r13, r12, rbp, rbx;
 };
 
 /**
@@ -156,6 +161,31 @@ void syscall_handler_c(struct syscall_frame *frame)
         process_t *child = create_user_process(path, args_ptr);
         // If the process creation fails, return -1
         // Otherwise, return the PID of the newly created process
+        frame->rax = child ? (int64_t)child->pid : -1;
+        break;
+    }
+    case SYS_fork:
+    {
+        trapframe_t regs = {
+            .rdi = frame->rdi,
+            .rsi = frame->rsi,
+            .rdx = frame->rdx,
+            .r10 = frame->r10,
+            .r8 = frame->r8,
+            .r9 = frame->r9,
+            .rbx = frame->rbx,
+            .rbp = frame->rbp,
+            .r12 = frame->r12,
+            .r13 = frame->r13,
+            .r14 = frame->r14,
+            .r15 = frame->r15,
+            .rax = frame->rax,
+            .rip = frame->user_rip,
+            .rflags = frame->user_rflags,
+            .rsp = frame->user_rsp,
+        };
+
+        process_t *child = fork_process(current_process, &regs);
         frame->rax = child ? (int64_t)child->pid : -1;
         break;
     }

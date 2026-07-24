@@ -1,14 +1,20 @@
 #include <apic.h>
 #include <idt.h>
+#include <pmm.h>
+#include <process.h>
 #include <stdint.h>
 #include <string.h>
 #include <utils.h>
+#include <vmm.h>
 
 #include <arch/x86_64/drivers/serial.h>
 
 #define IDT_SIZE 256
 
 #define IRQ_COUNT 16
+
+// #PF error code bits (Intel SDM Vol. 3A, 4.7)
+#define PF_ERR_WRITE (1u << 1)
 
 /**
  * @file Interrupt Descriptor Table (IDT) initialization
@@ -178,10 +184,28 @@ static const char *exception_messages[32] = {
  * This function is called by the interrupt service routines (ISRs) and
  * dispatches the appropriate handler based on the interrupt number.
  *
+ * A write-triggered page fault (#PF, vector 14) is first offered to
+ * vmm_handle_cow_fault() so a copy-on-write page from fork() can be
+ * resolved transparently; if it isn't a recognized COW fault, execution
+ * falls through to the same fatal handling as every other exception below.
+ *
  * @param frame Pointer to the interrupt frame containing CPU state.
  */
 void isr_handler(struct interrupt_frame *frame)
 {
+    if (frame->int_no == 14 && (frame->err_code & PF_ERR_WRITE) &&
+        current_process)
+    {
+        uint64_t fault_vaddr;
+        asm volatile("mov %%cr2, %0" : "=r"(fault_vaddr));
+
+        uint64_t *pml4 = (uint64_t *)(current_process->cr3 + hhdm_offset);
+        if (vmm_handle_cow_fault(pml4, fault_vaddr))
+        {
+            return;
+        }
+    }
+
     // TODO! remove this this is to track exception happen in each frame
     if (frame->int_no < 32)
     {

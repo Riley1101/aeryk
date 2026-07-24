@@ -18,8 +18,10 @@ extern uint64_t hhdm_offset;
 
 /**
  * @brief Initializes the Physical Memory Manager (PMM).
- * This function sets up the bitmap for tracking physical memory pages and marks available pages as free.
- * It retrieves the memory map and HHDM offset from the Limine bootloader.
+ * This function sets up the allocation bitmap and per-page refcount array
+ * for tracking physical memory pages, marks available pages as free, and
+ * permanently reserves physical page 0 (see pmm.c for why). It retrieves
+ * the memory map and HHDM offset from the Limine bootloader.
  */
 void init_pmm(void);
 
@@ -33,12 +35,34 @@ void init_pmm(void);
 void *pmm_alloc_page(void);
 
 /**
- * @brief Frees a single physical memory page.
- * This function marks the specified page as free in the bitmap.
- * If the freed page has a lower index than the current bitmap index, it updates the index.
+ * @brief Drops a reference to a physical memory page.
+ * Every allocated page starts with a reference count of 1. This decrements
+ * it and only marks the page free in the bitmap once the count reaches
+ * zero, so pages shared between processes (e.g. copy-on-write frames after
+ * fork()) survive until every owner has dropped its reference.
  *
- * @param page The physical address of the page to free.
+ * @param page The physical address of the page to drop a reference to.
  */
 void pmm_free_page(void *page);
+
+/**
+ * @brief Takes an extra reference on an already-allocated physical page.
+ * Used when a frame becomes shared between processes (copy-on-write after
+ * fork()) so pmm_free_page() won't reclaim it while another owner still
+ * maps it.
+ *
+ * @param page The physical address of the page to add a reference to.
+ */
+void pmm_page_ref_inc(void *page);
+
+/**
+ * @brief Returns the current reference count of a physical page.
+ * Used by the copy-on-write fault handler to tell whether it's the sole
+ * remaining owner of a frame (count == 1, safe to reclaim write access in
+ * place) or must copy (count > 1).
+ *
+ * @param page The physical address of the page to query.
+ */
+uint16_t pmm_page_refcount(void *page);
 
 #endif // !PMM_H
