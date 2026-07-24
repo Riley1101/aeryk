@@ -7,6 +7,14 @@
 #define MAX_FDS 32
 
 /**
+ * @brief Maximum number of argv entries accepted by create_user_process(),
+ * exec_process(), and their SYS_execve syscall handler. Shared
+ * so the kernel-side copy of a user argv[] array and the user-stack argv
+ * layout agree on the same limit.
+ */
+#define MAX_USER_ARGS 8
+
+/**
  * @brief Structure representing a file descriptor in a process.
  * This structure contains information about an open file, including a pointer to the corresponding VFS node,
  * the current offset within the file, and any flags associated with the file descriptor.
@@ -176,12 +184,13 @@ process_t *create_kernel_thread(void (*entry_point)());
  * Returns NULL if the file is missing, not a valid ELF64 executable,
  * or allocation fails.
  * @param path The path to the ELF executable in the virtual file system (VFS).
- * @param args_str Optional space-separated argument string (excluding the
- * program name), or NULL/empty for no arguments. argv[0] is derived from
- * the last path component of `path`.
+ * @param argc Number of strings in `argv` (must be > 0).
+ * @param argv Kernel-space array of kernel-space, NUL-terminated strings;
+ * conventionally argv[0] is the program name, but that's the caller's
+ * responsibility.
  * @return A pointer to the newly created process, or NULL on failure.
  */
-process_t *create_user_process(const char *path, const char *args_str);
+process_t *create_user_process(const char *path, int argc, char *const argv[]);
 
 /**
  * @brief Forks the currently running user process.
@@ -202,12 +211,14 @@ process_t *fork_process(process_t *parent, const trapframe_t *regs);
  * not return on success).
  * @param proc The process to execve into (must be current_process).
  * @param path The path to the new ELF executable in the VFS.
- * @param args_str Optional space-separated argument string (excluding the
- * program name), or NULL/empty for no arguments.
+ * @param argc Number of strings in `argv` (must be > 0).
+ * @param argv Kernel-space array of kernel-space, NUL-terminated strings;
+ * conventionally argv[0] is the program name, but that's the caller's
+ * responsibility.
  * @return -1 on failure, leaving `proc` running its old image unchanged.
  * Never returns on success.
  */
-int exec_process(process_t *proc, const char *path, const char *args_str);
+int exec_process(process_t *proc, const char *path, int argc, char *const argv[]);
 
 /**
  * @brief Reclaims resources of dead processes.

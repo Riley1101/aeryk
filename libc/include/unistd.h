@@ -38,15 +38,6 @@ ssize_t write(int fd, const void *buf, size_t count);
 int close(int fd);
 
 /**
- * @brief Spawns a new user process from an executable path.
- * @param path The path to the executable.
- * @param args Optional space-separated argument string (excluding the
- * program name), or NULL for no arguments.
- * @return Returns the pid of the new process or -1 on error.
- */
-int spawn(const char *path, const char *args);
-
-/**
  * @brief Forks the calling process, creating a near-identical copy that
  * resumes right after this call.
  * @return Returns 0 in the child, the child's pid in the parent, or -1 on
@@ -58,14 +49,13 @@ int fork(void);
  * @brief Replaces the calling process's image with a new executable,
  * keeping the same pid, parent, and open file descriptors. Named after
  * Linux's execve syscall (number 59), though this simplifies the
- * signature to a single space-separated args string rather than an
- * argv[]/envp[] pair.
+ * signature to leave out envp (no environment variables yet).
  * @param path The path to the executable.
- * @param args Optional space-separated argument string (excluding the
- * program name), or NULL for no arguments.
+ * @param argv NULL-terminated array of argument strings; conventionally
+ * argv[0] is the program name, but that's the caller's responsibility.
  * @return Returns -1 on error. Does not return on success.
  */
-int execve(const char *path, const char *args);
+int execve(const char *path, char *const argv[]);
 
 /**
  * @brief Waits for a child process to terminate.

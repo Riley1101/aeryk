@@ -62,22 +62,6 @@ int close(int fd) {
 }
 
 /**
- * @brief Spawns a new user process from an executable path.
- * @param path The path to the executable.
- * @param args Optional space-separated argument string (excluding the
- * program name), or NULL for no arguments.
- * @return Returns the pid of the new process or -1 on error.
- */
-int spawn(const char *path, const char *args) {
-  long ret;
-  asm volatile("syscall"
-                : "=a"(ret)
-                : "0"(SYS_spawn), "D"(path), "S"(args)
-                : "rcx", "r11", "memory");
-  return (int)ret;
-}
-
-/**
  * @brief Forks the calling process.
  * @return Returns 0 in the child, the child's pid in the parent, or -1 on
  * error.
@@ -94,18 +78,17 @@ int fork(void) {
 /**
  * @brief Replaces the calling process's image with a new executable.
  * Named after Linux's execve syscall (number 59), though this simplifies
- * the signature to a single space-separated args string rather than an
- * argv[]/envp[] pair.
+ * the signature to leave out envp (no environment variables yet).
  * @param path The path to the executable.
- * @param args Optional space-separated argument string (excluding the
- * program name), or NULL for no arguments.
+ * @param argv NULL-terminated array of argument strings; conventionally
+ * argv[0] is the program name, but that's the caller's responsibility.
  * @return Returns -1 on error. Does not return on success.
  */
-int execve(const char *path, const char *args) {
+int execve(const char *path, char *const argv[]) {
   long ret;
   asm volatile("syscall"
                 : "=a"(ret)
-                : "0"(SYS_execve), "D"(path), "S"(args)
+                : "0"(SYS_execve), "D"(path), "S"(argv)
                 : "rcx", "r11", "memory");
   return (int)ret;
 }
@@ -140,5 +123,3 @@ ssize_t listdir(const char *path, char *buf, size_t size) {
                 : "rcx", "r11", "memory");
   return ret;
 }
-
-

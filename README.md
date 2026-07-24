@@ -37,7 +37,8 @@ A x86_64 kernel written in C, booted via the [Limine](https://codeberg.org/Limin
   -  [x] sys_open, sys_read, sys_close
   -  [x] sys_spawn and sys_wait
   -  [x] Context switching with MLFQ 
-  -  [ ] fork, clone, execve
+  -  [x] fork,  execve
+  -  [ ] clone
 - [x] Initramfs 
 - [x] Filesystem (VFS)
 - [x] Elf loader 

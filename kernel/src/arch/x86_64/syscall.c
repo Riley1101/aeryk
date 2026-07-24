@@ -31,6 +31,53 @@ struct syscall_frame
     uint64_t r15, r14, r13, r12, rbp, rbx;
 };
 
+#define MAX_ARG_LEN 128
+
+/**
+ * @brief Copies a NULL-terminated argv[] array from user space into
+ * fixed-size kernel buffers, for SYS_execve. Each user pointer
+ * is dereferenced directly rather than through a copy_from_user-style
+ * safety wrapper, consistent with how every other syscall in this file
+ * (SYS_open, SYS_read, ...) already trusts user pointers, since the
+ * user's pages are mapped in the currently active pagetable during the
+ * syscall.
+ * @param user_argv NULL-terminated array of user pointers to NUL-terminated
+ * strings, or NULL for an empty argv.
+ * @param strs Kernel storage for up to MAX_USER_ARGS strings, each
+ * truncated to MAX_ARG_LEN - 1 bytes.
+ * @param argv Filled with pointers into `strs`, one per copied argument.
+ * @return The number of arguments copied (0 if `user_argv` is NULL or
+ * empty).
+ */
+static int copy_argv_from_user(const char *const *user_argv,
+                               char strs[MAX_USER_ARGS][MAX_ARG_LEN],
+                               char *argv[MAX_USER_ARGS])
+{
+    if (!user_argv)
+    {
+        return 0;
+    }
+
+    int argc = 0;
+    for (; argc < MAX_USER_ARGS; argc++)
+    {
+        const char *user_str = user_argv[argc];
+        if (!user_str)
+        {
+            break;
+        }
+
+        size_t i = 0;
+        for (; i < MAX_ARG_LEN - 1 && user_str[i] != '\0'; i++)
+        {
+            strs[argc][i] = user_str[i];
+        }
+        strs[argc][i] = '\0';
+        argv[argc] = strs[argc];
+    }
+    return argc;
+}
+
 /**
  * @brief Handles system calls invoked by user processes.
  *
@@ -121,49 +168,6 @@ void syscall_handler_c(struct syscall_frame *frame)
         }
         break;
     }
-    case SYS_spawn:
-    {
-        const char *user_path = (const char *)frame->rdi;
-        if (!user_path)
-        {
-            frame->rax = -1;
-            break;
-        }
-
-        char path[128];
-        size_t i = 0;
-        for (; i < sizeof(path) - 1 && user_path[i] != '\0'; i++)
-        {
-            path[i] = user_path[i];
-        }
-        path[i] = '\0';
-
-        if (i == 0)
-        {
-            frame->rax = -1;
-            break;
-        }
-
-        const char *user_args = (const char *)frame->rsi;
-        char args[128];
-        const char *args_ptr = NULL;
-        if (user_args)
-        {
-            size_t j = 0;
-            for (; j < sizeof(args) - 1 && user_args[j] != '\0'; j++)
-            {
-                args[j] = user_args[j];
-            }
-            args[j] = '\0';
-            args_ptr = args;
-        }
-
-        process_t *child = create_user_process(path, args_ptr);
-        // If the process creation fails, return -1
-        // Otherwise, return the PID of the newly created process
-        frame->rax = child ? (int64_t)child->pid : -1;
-        break;
-    }
     case SYS_fork:
     {
         trapframe_t regs = {
@@ -212,23 +216,18 @@ void syscall_handler_c(struct syscall_frame *frame)
             break;
         }
 
-        const char *user_args = (const char *)frame->rsi;
-        char args[128];
-        const char *args_ptr = NULL;
-        if (user_args)
+        char strs[MAX_USER_ARGS][MAX_ARG_LEN];
+        char *argv[MAX_USER_ARGS];
+        int argc = copy_argv_from_user((const char *const *)frame->rsi, strs, argv);
+        if (argc == 0)
         {
-            size_t j = 0;
-            for (; j < sizeof(args) - 1 && user_args[j] != '\0'; j++)
-            {
-                args[j] = user_args[j];
-            }
-            args[j] = '\0';
-            args_ptr = args;
+            frame->rax = -1;
+            break;
         }
 
         // On success exec_process() jumps directly into the new program
         // and never returns here. Only the failure path sets rax.
-        exec_process(current_process, path, args_ptr);
+        exec_process(current_process, path, argc, argv);
         frame->rax = -1;
         break;
     }

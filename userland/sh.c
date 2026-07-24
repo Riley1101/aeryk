@@ -5,6 +5,7 @@
 
 #define LINE_MAX 128
 #define BIN_PREFIX "/bin/"
+#define MAX_ARGS 8
 
 /**
  * @brief Reads one line of input from stdin (fd 0) into buf.
@@ -29,8 +30,8 @@ static int read_line(char *buf, int size) {
 
 void main(void) {
   char line[LINE_MAX];
-  char cmd[LINE_MAX];
   char path[sizeof(BIN_PREFIX) - 1 + LINE_MAX];
+  char *argv[MAX_ARGS + 1];
 
   for (;;) {
     printf("> ");
@@ -40,6 +41,8 @@ void main(void) {
       continue;
     }
 
+    // Tokenize the line into argv in place: each space becomes a '\0',
+    // and argv[i] points at the start of the i-th token within line.
     char *p = line;
     while (*p == ' ') {
       p++;
@@ -48,31 +51,40 @@ void main(void) {
       continue;
     }
 
-    char *cmd_start = p;
-    while (*p && *p != ' ') {
-      p++;
+    int argc = 0;
+    while (*p && argc < MAX_ARGS) {
+      argv[argc++] = p;
+      while (*p && *p != ' ') {
+        p++;
+      }
+      if (*p) {
+        *p++ = '\0';
+      }
+      while (*p == ' ') {
+        p++;
+      }
     }
-    int cmd_len = (int)(p - cmd_start);
+    argv[argc] = NULL;
 
-    while (*p == ' ') {
-      p++;
-    }
-    char *args = (*p != '\0') ? p : NULL;
-
-    memcpy(cmd, cmd_start, cmd_len);
-    cmd[cmd_len] = '\0';
-
-    if (strcmp(cmd, "exit") == 0) {
+    if (strcmp(argv[0], "exit") == 0) {
       exit(0);
     }
 
+    size_t cmd_len = strlen(argv[0]);
     memcpy(path, BIN_PREFIX, sizeof(BIN_PREFIX) - 1);
-    memcpy(path + sizeof(BIN_PREFIX) - 1, cmd, cmd_len + 1);
+    memcpy(path + sizeof(BIN_PREFIX) - 1, argv[0], cmd_len + 1);
 
-    int pid = spawn(path, args);
+    int pid = fork();
     if (pid < 0) {
-      printf("sh: %s: not found\n", cmd);
+      printf("sh: fork failed\n");
       continue;
+    }
+
+    if (pid == 0) {
+      execve(path, argv);
+      // Only reached if execve() failed.
+      printf("sh: %s: not found\n", argv[0]);
+      exit(1);
     }
 
     int status = 0;

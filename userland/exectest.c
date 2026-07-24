@@ -9,7 +9,8 @@ void main(void) {
 
   if (pid == 0) {
     printf("exectest: child execing /bin/ls\n");
-    execve("/bin/ls", "/bin");
+    char *argv[] = {"/bin/ls", "/bin", NULL};
+    execve("/bin/ls", argv);
     // Only reached if execve() failed.
     printf("exectest: execve() failed\n");
     exit(1);

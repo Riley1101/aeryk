@@ -15,11 +15,10 @@
 #define SYS_write 1
 #define SYS_open 2
 #define SYS_close 3
-#define SYS_spawn 4
-#define SYS_wait 5
-#define SYS_readdir 6
 #define SYS_fork 57
 #define SYS_execve 59
 #define SYS_exit 60
+#define SYS_wait 61
+#define SYS_readdir 78
 
 #endif // !_ABI_SYSCALL_H

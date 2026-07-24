@@ -272,7 +272,18 @@ static void mount_initramfs(void)
  */
 static void spawn_initial_processes(void)
 {
-    if (create_user_process("/bin/sh", NULL) == NULL)
+    char *exectest_argv[] = {"/bin/exectest", NULL};
+    if (create_user_process("/bin/exectest", 1, exectest_argv) == NULL)
+    {
+        print("[!] ERROR: failed to load /bin/exectest\n");
+    }
+    else
+    {
+        print("[8] /bin/exectest loaded, switching to Ring 3...\n");
+    }
+
+    char *sh_argv[] = {"/bin/sh", NULL};
+    if (create_user_process("/bin/sh", 1, sh_argv) == NULL)
     {
         print("[!] ERROR: failed to load /bin/sh\n");
     }

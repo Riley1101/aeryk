@@ -232,31 +232,13 @@ process_t *create_kernel_thread(void (*entrypoint)())
 }
 
 #define USER_STACK_TOP 0x0000700000000000ULL
-#define MAX_USER_ARGS 8
 
 /**
- * @brief Returns the last path component of `path` (e.g. "/bin/cat" -> "cat").
- */
-static const char *basename_of(const char *path)
-{
-    const char *base = path;
-    for (const char *p = path; *p; p++)
-    {
-        if (*p == '/')
-        {
-            base = p + 1;
-        }
-    }
-    return base;
-}
-
-/**
- * @brief Lays out argv[0] (derived from the executable path) and any
- * space-separated tokens from `args_str` at the top of a freshly mapped
- * user stack page, following the convention crt0.asm expects: the initial
- * RSP points at a packed [argc][argv] pair, where argv points at a
- * NULL-terminated array of pointers into the argument strings, all of
- * which live below that array on the same page.
+ * @brief Lays out `argv[0..argc)` at the top of a freshly mapped user stack
+ * page, following the convention crt0.asm expects: the initial RSP points
+ * at a packed [argc][argv] pair, where argv points at a NULL-terminated
+ * array of pointers into the argument strings, all of which live below
+ * that array on the same page.
  *
  * Writes through `stack_hhdm_base`, the kernel (HHDM) alias of the same
  * physical page mapped into the user pagetable at
@@ -265,45 +247,27 @@ static const char *basename_of(const char *path)
  * in one page.
  * @param stack_hhdm_base Kernel-accessible base address of the stack page.
  * @param stack_vaddr_base User-visible virtual base address of the stack page.
- * @param argv0 The value for argv[0].
- * @param args_str Optional space-separated remaining arguments, or NULL.
- * @return The initial user stack pointer, or 0 on failure (arguments too large).
+ * @param argc Number of strings in `argv` (must be > 0 and <= MAX_USER_ARGS;
+ * conventionally argv[0] is the program name, but that's the caller's
+ * responsibility, not enforced here).
+ * @param argv Kernel-space array of kernel-space, NUL-terminated strings.
+ * @return The initial user stack pointer, or 0 on failure (bad argc, or
+ * the arguments don't fit).
  */
 static uint64_t setup_user_stack_args(void *stack_hhdm_base,
                                       uint64_t stack_vaddr_base,
-                                      const char *argv0,
-                                      const char *args_str)
+                                      int argc,
+                                      char *const argv[])
 {
-    const char *tokens[MAX_USER_ARGS];
-    size_t token_lens[MAX_USER_ARGS];
-    int argc = 0;
-
-    tokens[argc] = argv0;
-    token_lens[argc] = strlen(argv0);
-    argc++;
-
-    if (args_str)
+    if (argc <= 0 || argc > MAX_USER_ARGS)
     {
-        const char *p = args_str;
-        while (*p && argc < MAX_USER_ARGS)
-        {
-            while (*p == ' ')
-            {
-                p++;
-            }
-            if (!*p)
-            {
-                break;
-            }
-            const char *start = p;
-            while (*p && *p != ' ')
-            {
-                p++;
-            }
-            tokens[argc] = start;
-            token_lens[argc] = (size_t)(p - start);
-            argc++;
-        }
+        return 0;
+    }
+
+    size_t token_lens[MAX_USER_ARGS];
+    for (int i = 0; i < argc; i++)
+    {
+        token_lens[i] = strlen(argv[i]);
     }
 
     uint64_t cur = stack_vaddr_base + PAGE_SIZE;
@@ -318,7 +282,7 @@ static uint64_t setup_user_stack_args(void *stack_hhdm_base,
         }
         cur -= len;
         char *dst = (char *)stack_hhdm_base + (cur - stack_vaddr_base);
-        memcpy(dst, tokens[i], token_lens[i]);
+        memcpy(dst, argv[i], token_lens[i]);
         dst[token_lens[i]] = '\0';
         str_vaddrs[i] = cur;
     }
@@ -353,22 +317,25 @@ static uint64_t setup_user_stack_args(void *stack_hhdm_base,
 
 /**
  * @brief Loads the ELF executable at `path` into a freshly allocated
- * per-process pagetable, with a user stack laid out for `args_str`.
+ * per-process pagetable, with a user stack laid out for `argv`.
  * Shared by create_user_process() (new process) and exec_process()
  * (replacing an existing process's image), since both need exactly the
  * same "pagetable + segments + argv stack" setup, just wired into a
  * process_t differently afterward.
  * @param path The path to the ELF executable in the virtual file system (VFS).
- * @param args_str Optional space-separated argument string (excluding the
- * program name), or NULL/empty for no arguments.
+ * @param argc Number of strings in `argv` (must be > 0).
+ * @param argv Kernel-space array of kernel-space, NUL-terminated strings;
+ * conventionally argv[0] is the program name, but that's the caller's
+ * responsibility.
  * @param out_pml4 Set to the new pagetable's HHDM address on success.
  * @param out_entry Set to the ELF entry point on success.
  * @param out_user_stack_top Set to the initial user RSP on success.
- * @return 0 on success, -1 on failure (file missing/not ELF, or an
- * allocation failed; any partially-built pagetable is torn down first).
+ * @return 0 on success, -1 on failure (file missing/not ELF, bad argc/argv,
+ * or an allocation failed; any partially-built pagetable is torn down first).
  */
-static int load_elf_into_new_pagetable(const char *path, const char *args_str,
-                                       uint64_t **out_pml4, uint64_t *out_entry,
+static int load_elf_into_new_pagetable(const char *path, int argc,
+                                       char *const argv[], uint64_t **out_pml4,
+                                       uint64_t *out_entry,
                                        uint64_t *out_user_stack_top)
 {
     vfs_node_t *file = vfs_find_node(vfs_root, path);
@@ -401,7 +368,7 @@ static int load_elf_into_new_pagetable(const char *path, const char *args_str,
 
     void *stack_hhdm_base = (void *)((uint64_t)user_stack_phys + hhdm_offset);
     uint64_t initial_rsp = setup_user_stack_args(
-        stack_hhdm_base, USER_STACK_TOP - PAGE_SIZE, basename_of(path), args_str);
+        stack_hhdm_base, USER_STACK_TOP - PAGE_SIZE, argc, argv);
     if (initial_rsp == 0)
     {
         vmm_destroy_user_pagetable(pml4);
@@ -421,15 +388,17 @@ static int load_elf_into_new_pagetable(const char *path, const char *args_str,
  * Returns NULL if the file is missing, not a valid ELF64 executable,
  * or allocation fails.
  * @param path The path to the ELF executable in the virtual file system (VFS).
- * @param args_str Optional space-separated argument string (excluding the
- * program name), or NULL/empty for no arguments.
+ * @param argc Number of strings in `argv` (must be > 0).
+ * @param argv Kernel-space array of kernel-space, NUL-terminated strings;
+ * conventionally argv[0] is the program name, but that's the caller's
+ * responsibility.
  * @return A pointer to the newly created process, or NULL on failure.
  */
-process_t *create_user_process(const char *path, const char *args_str)
+process_t *create_user_process(const char *path, int argc, char *const argv[])
 {
     uint64_t *pml4;
     uint64_t entry, initial_rsp;
-    if (load_elf_into_new_pagetable(path, args_str, &pml4, &entry, &initial_rsp) != 0)
+    if (load_elf_into_new_pagetable(path, argc, argv, &pml4, &entry, &initial_rsp) != 0)
     {
         return NULL;
     }
@@ -480,16 +449,18 @@ process_t *create_user_process(const char *path, const char *args_str)
  * execve()'s usual semantics.
  * @param proc The process to execve into (must be current_process).
  * @param path The path to the new ELF executable in the VFS.
- * @param args_str Optional space-separated argument string (excluding the
- * program name), or NULL/empty for no arguments.
+ * @param argc Number of strings in `argv` (must be > 0).
+ * @param argv Kernel-space array of kernel-space, NUL-terminated strings;
+ * conventionally argv[0] is the program name, but that's the caller's
+ * responsibility.
  * @return -1 on failure, leaving `proc` running its old image unchanged.
  * Never returns on success.
  */
-int exec_process(process_t *proc, const char *path, const char *args_str)
+int exec_process(process_t *proc, const char *path, int argc, char *const argv[])
 {
     uint64_t *new_pml4;
     uint64_t new_entry, new_user_stack_top;
-    if (load_elf_into_new_pagetable(path, args_str, &new_pml4, &new_entry,
+    if (load_elf_into_new_pagetable(path, argc, argv, &new_pml4, &new_entry,
                                     &new_user_stack_top) != 0)
     {
         return -1;
@@ -525,9 +496,10 @@ static void fork_trampoline(void)
 
 /**
  * @brief Forks the currently running user process.
- * Deep-copies `parent`'s address space and file descriptor table into a
- * new process, and arranges for it to resume in user mode at the exact
- * point captured in `regs`, except with a return value of 0.
+ * Copy-on-write clones `parent`'s address space and copies its file
+ * descriptor table into a new process, and arranges for it to resume in
+ * user mode at the exact point captured in `regs`, except with a return
+ * value of 0.
  */
 process_t *fork_process(process_t *parent, const trapframe_t *regs)
 {
