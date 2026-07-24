@@ -352,6 +352,69 @@ static uint64_t setup_user_stack_args(void *stack_hhdm_base,
 }
 
 /**
+ * @brief Loads the ELF executable at `path` into a freshly allocated
+ * per-process pagetable, with a user stack laid out for `args_str`.
+ * Shared by create_user_process() (new process) and exec_process()
+ * (replacing an existing process's image), since both need exactly the
+ * same "pagetable + segments + argv stack" setup, just wired into a
+ * process_t differently afterward.
+ * @param path The path to the ELF executable in the virtual file system (VFS).
+ * @param args_str Optional space-separated argument string (excluding the
+ * program name), or NULL/empty for no arguments.
+ * @param out_pml4 Set to the new pagetable's HHDM address on success.
+ * @param out_entry Set to the ELF entry point on success.
+ * @param out_user_stack_top Set to the initial user RSP on success.
+ * @return 0 on success, -1 on failure (file missing/not ELF, or an
+ * allocation failed; any partially-built pagetable is torn down first).
+ */
+static int load_elf_into_new_pagetable(const char *path, const char *args_str,
+                                       uint64_t **out_pml4, uint64_t *out_entry,
+                                       uint64_t *out_user_stack_top)
+{
+    vfs_node_t *file = vfs_find_node(vfs_root, path);
+    if (!file || file->type != VFS_FILE)
+    {
+        return -1;
+    }
+
+    uint64_t *pml4 = vmm_new_user_pagetable();
+    if (!pml4)
+    {
+        return -1;
+    }
+
+    uint64_t entry;
+    if (elf_load(file, pml4, &entry) != 0)
+    {
+        vmm_destroy_user_pagetable(pml4);
+        return -1;
+    }
+
+    void *user_stack_phys = pmm_alloc_page();
+    if (!user_stack_phys)
+    {
+        vmm_destroy_user_pagetable(pml4);
+        return -1;
+    }
+    vmm_map_page(pml4, USER_STACK_TOP - PAGE_SIZE, (uint64_t)user_stack_phys,
+                 PTE_PRESENT | PTE_WRITABLE | PTE_USER | PTE_NX);
+
+    void *stack_hhdm_base = (void *)((uint64_t)user_stack_phys + hhdm_offset);
+    uint64_t initial_rsp = setup_user_stack_args(
+        stack_hhdm_base, USER_STACK_TOP - PAGE_SIZE, basename_of(path), args_str);
+    if (initial_rsp == 0)
+    {
+        vmm_destroy_user_pagetable(pml4);
+        return -1;
+    }
+
+    *out_pml4 = pml4;
+    *out_entry = entry;
+    *out_user_stack_top = initial_rsp;
+    return 0;
+}
+
+/**
  * @brief Creates a new user process from an ELF executable.
  * Loads the ELF executable at `path` from the VFS into a fresh
  * per-process pagetable and queues it to run in ring 3.
@@ -364,40 +427,10 @@ static uint64_t setup_user_stack_args(void *stack_hhdm_base,
  */
 process_t *create_user_process(const char *path, const char *args_str)
 {
-    vfs_node_t *file = vfs_find_node(vfs_root, path);
-    if (!file || file->type != VFS_FILE)
+    uint64_t *pml4;
+    uint64_t entry, initial_rsp;
+    if (load_elf_into_new_pagetable(path, args_str, &pml4, &entry, &initial_rsp) != 0)
     {
-        return NULL;
-    }
-
-    uint64_t *pml4 = vmm_new_user_pagetable();
-    if (!pml4)
-    {
-        return NULL;
-    }
-
-    uint64_t entry;
-    if (elf_load(file, pml4, &entry) != 0)
-    {
-        vmm_destroy_user_pagetable(pml4);
-        return NULL;
-    }
-
-    void *user_stack_phys = pmm_alloc_page();
-    if (!user_stack_phys)
-    {
-        vmm_destroy_user_pagetable(pml4);
-        return NULL;
-    }
-    vmm_map_page(pml4, USER_STACK_TOP - PAGE_SIZE, (uint64_t)user_stack_phys,
-                 PTE_PRESENT | PTE_WRITABLE | PTE_USER | PTE_NX);
-
-    void *stack_hhdm_base = (void *)((uint64_t)user_stack_phys + hhdm_offset);
-    uint64_t initial_rsp = setup_user_stack_args(
-        stack_hhdm_base, USER_STACK_TOP - PAGE_SIZE, basename_of(path), args_str);
-    if (initial_rsp == 0)
-    {
-        vmm_destroy_user_pagetable(pml4);
         return NULL;
     }
 
@@ -434,6 +467,45 @@ process_t *create_user_process(const char *path, const char *args_str)
     proc->ticks_executed = 0;
     mlfq_enqueue(proc);
     return proc;
+}
+
+/**
+ * @brief Replaces `proc`'s address space with a freshly loaded ELF image,
+ * implementing execve(). `proc` must be the currently running process
+ * (execve only ever replaces the caller's own image). On success this
+ * does not return: it switches to the new pagetable and jumps directly
+ * into the new program in ring 3 via enter_usermode(), the same way a
+ * syscall never "returns" from SYS_exit. `proc`'s pid, kernel stack,
+ * parent/children, and open file descriptors are all preserved, matching
+ * execve()'s usual semantics.
+ * @param proc The process to execve into (must be current_process).
+ * @param path The path to the new ELF executable in the VFS.
+ * @param args_str Optional space-separated argument string (excluding the
+ * program name), or NULL/empty for no arguments.
+ * @return -1 on failure, leaving `proc` running its old image unchanged.
+ * Never returns on success.
+ */
+int exec_process(process_t *proc, const char *path, const char *args_str)
+{
+    uint64_t *new_pml4;
+    uint64_t new_entry, new_user_stack_top;
+    if (load_elf_into_new_pagetable(path, args_str, &new_pml4, &new_entry,
+                                    &new_user_stack_top) != 0)
+    {
+        return -1;
+    }
+
+    uint64_t *old_pml4 = (uint64_t *)(proc->cr3 + hhdm_offset);
+    vmm_destroy_user_pagetable(old_pml4);
+
+    proc->cr3 = (uint64_t)new_pml4 - hhdm_offset;
+    proc->entry = new_entry;
+    proc->user_stack_top = new_user_stack_top;
+
+    asm volatile("mov %0, %%cr3" : : "r"(proc->cr3) : "memory");
+
+    enter_usermode(proc->entry, proc->user_stack_top);
+    __builtin_unreachable();
 }
 
 /**

@@ -55,6 +55,19 @@ int spawn(const char *path, const char *args);
 int fork(void);
 
 /**
+ * @brief Replaces the calling process's image with a new executable,
+ * keeping the same pid, parent, and open file descriptors. Named after
+ * Linux's execve syscall (number 59), though this simplifies the
+ * signature to a single space-separated args string rather than an
+ * argv[]/envp[] pair.
+ * @param path The path to the executable.
+ * @param args Optional space-separated argument string (excluding the
+ * program name), or NULL for no arguments.
+ * @return Returns -1 on error. Does not return on success.
+ */
+int execve(const char *path, const char *args);
+
+/**
  * @brief Waits for a child process to terminate.
  * @param pid The process ID of the child to wait for.
  * @param status A pointer to an integer where the exit status will be stored.

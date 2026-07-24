@@ -189,6 +189,49 @@ void syscall_handler_c(struct syscall_frame *frame)
         frame->rax = child ? (int64_t)child->pid : -1;
         break;
     }
+    case SYS_execve:
+    {
+        const char *user_path = (const char *)frame->rdi;
+        if (!user_path)
+        {
+            frame->rax = -1;
+            break;
+        }
+
+        char path[128];
+        size_t i = 0;
+        for (; i < sizeof(path) - 1 && user_path[i] != '\0'; i++)
+        {
+            path[i] = user_path[i];
+        }
+        path[i] = '\0';
+
+        if (i == 0)
+        {
+            frame->rax = -1;
+            break;
+        }
+
+        const char *user_args = (const char *)frame->rsi;
+        char args[128];
+        const char *args_ptr = NULL;
+        if (user_args)
+        {
+            size_t j = 0;
+            for (; j < sizeof(args) - 1 && user_args[j] != '\0'; j++)
+            {
+                args[j] = user_args[j];
+            }
+            args[j] = '\0';
+            args_ptr = args;
+        }
+
+        // On success exec_process() jumps directly into the new program
+        // and never returns here. Only the failure path sets rax.
+        exec_process(current_process, path, args_ptr);
+        frame->rax = -1;
+        break;
+    }
     case SYS_readdir:
     {
         const char *path = (const char *)frame->rdi;

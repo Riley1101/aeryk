@@ -185,7 +185,8 @@ process_t *create_user_process(const char *path, const char *args_str);
 
 /**
  * @brief Forks the currently running user process.
- * Deep-copies `parent`'s address space and file descriptor table into a
+ * Copy-on-write clones `parent`'s address space (see
+ * vmm_clone_user_pagetable()) and copies its file descriptor table into a
  * new process, and arranges for it to resume in user mode at the exact
  * point captured in `regs` (the parent's register state when it invoked
  * the fork syscall), except with a return value of 0.
@@ -194,6 +195,19 @@ process_t *create_user_process(const char *path, const char *args_str);
  * @return A pointer to the newly created child process, or NULL on failure.
  */
 process_t *fork_process(process_t *parent, const trapframe_t *regs);
+
+/**
+ * @brief Replaces `proc`'s address space with a freshly loaded ELF image,
+ * implementing execve(). See process.c for the full behavior (this does
+ * not return on success).
+ * @param proc The process to execve into (must be current_process).
+ * @param path The path to the new ELF executable in the VFS.
+ * @param args_str Optional space-separated argument string (excluding the
+ * program name), or NULL/empty for no arguments.
+ * @return -1 on failure, leaving `proc` running its old image unchanged.
+ * Never returns on success.
+ */
+int exec_process(process_t *proc, const char *path, const char *args_str);
 
 /**
  * @brief Reclaims resources of dead processes.
