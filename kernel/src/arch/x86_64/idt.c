@@ -206,9 +206,41 @@ void isr_handler(struct interrupt_frame *frame)
         }
     }
 
-    // TODO! remove this this is to track exception happen in each frame
     if (frame->int_no < 32)
     {
+        // CPL 3 means the faulting instruction was running as user-mode
+        // code (as opposed to a kernel bug, or a bad user pointer
+        // dereferenced from inside a syscall, which runs at CPL 0). Only
+        // that process is misbehaving, so kill it and keep the rest of the
+        // system running instead of halting everything.
+        int from_userland = current_process && (frame->cs & 3) == 3;
+
+        if (from_userland)
+        {
+            serial_print("\n[Fault] Killing user process due to exception: ");
+            serial_print(exception_messages[frame->int_no]);
+            serial_print("\n");
+
+            current_process->exit_code = -1;
+            current_process->state = PROCESS_DEAD;
+
+            // Exceptions run with IF=0 (interrupt gate). schedule() never
+            // returns here for a dead process -- it switches straight into
+            // another process's saved context via switch_task(), which
+            // doesn't touch rflags -- so without this, IF stays 0 forever
+            // and the whole system loses interrupts (timer, keyboard) the
+            // moment this fault fires. Same convention as keyboard_read().
+            asm volatile("sti");
+            schedule();
+
+            // schedule() does not return for a dead process; halt
+            // defensively if it somehow does.
+            for (;;)
+            {
+                asm volatile("hlt");
+            }
+        }
+
         serial_print("\n KERNEL PANIC **\n");
         serial_print("EXCEPTION:");
         serial_print(exception_messages[frame->int_no]);
