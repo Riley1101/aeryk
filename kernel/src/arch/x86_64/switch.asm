@@ -5,7 +5,12 @@ global switch_task
 ; System V API pass arguments in RDI = prev, RSI = next
 
 switch_task:
-  ; 1. Save callee-save registers for the current thread
+  ; 1. Save callee-save registers and RFLAGS (incl. IF) for the current thread.
+  ; RFLAGS must be saved per-task here -- it is not restored by this ret-based
+  ; switch the way an iretq would restore it, so without pushfq/popfq, IF just
+  ; carries over from whichever task last ran, regardless of which task
+  ; resumes next.
+  pushfq
   push rbx
   push rbp
   push r12
@@ -25,13 +30,14 @@ switch_task:
   mov rax, [rsi + 16]
   mov cr3, rax
 
-  ; 4. Restore the callee-save register for the next thread
+  ; 4. Restore the callee-save registers and RFLAGS for the next thread
   pop r15
   pop r14
   pop r13
   pop r12
   pop rbp
   pop rbx
+  popfq
 
   ; 5. Return to next thread's execution point
   ret

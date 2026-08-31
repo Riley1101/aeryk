@@ -30,7 +30,7 @@ uint32_t lapic_read(uint32_t reg) {
 
 /**
  * @brief Sends an End of Interrupt (EOI) signal to the Local APIC, indicating that the current interrupt has been handled.
- * This function writes a value of 0 to the EOI register of the Local APIC, which is located at the LAPIC_EOI offset from the LAPIC_BASE address. 
+ * This function writes a value of 0 to the EOI register of the Local APIC, which is located at the LAPIC_EOI offset from the LAPIC_BASE address.
  * It is typically called at the end of an interrupt service routine to inform the APIC that it can process further interrupts.
  */
 void lapic_eoi(void) { lapic_write(LAPIC_EOI, 0); }
@@ -63,7 +63,7 @@ void ioapic_set_irq(uint8_t irq, uint64_t apic_id, uint8_t vector) {
 }
 
 /**
- * @brief Initializes the Local APIC and IO APIC by mapping their physical addresses to virtual addresses, disabling legacy PICs, enabling the Local APIC, 
+ * @brief Initializes the Local APIC and IO APIC by mapping their physical addresses to virtual addresses, disabling legacy PICs, enabling the Local APIC,
  * and setting the Task Priority Register (TPR) to allow all interrupts.
  */
 void init_apic() {

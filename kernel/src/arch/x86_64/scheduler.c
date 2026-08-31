@@ -27,8 +27,8 @@
  * @brief Represents a queue in the MLFQ scheduler.
  * Each queue has a head and tail pointer to the processes in that queue, as well as
  * a time quantum that determines how long a process can run before being preempted.
- * 
- * @struct queue_t 
+ *
+ * @struct queue_t
  * @member head Pointer to the first process in the queue.
  * @member tail Pointer to the last process in the queue.
  * @member quantum The time quantum for this queue, in ticks.
@@ -57,7 +57,7 @@ static uint32_t global_ticks = 0;
  * @brief Initializes the MLFQ scheduler by setting up each queue with its corresponding time quantum.
  * The time quantum for each queue increases with lower priority levels, allowing higher-priority processes to
  * run for shorter periods before being preempted, while lower-priority processes can run for longer periods.
- * This function should be called during the kernel initialization phase before any processes are scheduled.    
+ * This function should be called during the kernel initialization phase before any processes are scheduled.
  */
 void mlfq_init(void)
 {
@@ -73,10 +73,10 @@ void mlfq_init(void)
 
 /**
  * @brief Enqueues a process into the appropriate MLFQ queue based on its priority.
- * If the process is already in the queue or is dead, it will not be enqueued. 
+ * If the process is already in the queue or is dead, it will not be enqueued.
  * The process's state is set to PROCESS_READY, and its queue_next and queue_prev pointers are
  * updated to link it into the queue. If the queue is empty, the process becomes both the head and tail of the queue.
- * 
+ *
  * @param proc Pointer to the process to enqueue.
  */
 void mlfq_enqueue(process_t *proc)
@@ -162,7 +162,7 @@ static void mlfq_boost_all(void)
 
 /**
  * @brief Called on each timer tick to update the MLFQ scheduler state.
- * Increments the global tick counter and checks if a priority boost is needed. 
+ * Increments the global tick counter and checks if a priority boost is needed.
  * If the current process has exceeded its time quantum, it is demoted to a lower priority queue, and the scheduler
  * is invoked to pick the next process to run. If the current process is not running or is NULL, the function returns without making any changes.
  */

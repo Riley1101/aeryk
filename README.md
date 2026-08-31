@@ -114,11 +114,26 @@ make clean
 
 ## LSP
 
-You can use bear to generate a compile command.json file for LSP support. This is required for some features of the LSP to work, such as "Go to definition" and "Find references".
+You can use bear to generate a compile_commands.json file for LSP support. This is required for some features of the LSP to work, such as "Go to definition" and "Find references".
 
 ```sh
-bear -- make 
+bear -- make
 ```
+
+Note: `make` skips recompiling files that are already up to date, and bear only
+records commands that actually run. If `obj-userland/` is already built, the
+above won't capture userland/libc compile commands. To include userland and
+libc (which use different flags than the kernel, e.g. no `-nostdinc`), force a
+rebuild of those targets under bear:
+
+```sh
+rm -rf obj-userland userland/*.elf
+bear --append -- make kernel initramfs.cpio
+```
+
+`--append` merges into the existing compile_commands.json instead of
+overwriting the kernel entries. Re-run this whenever you add a new
+userland/libc source file.
 
 ## Sandbox
 

@@ -9,8 +9,15 @@
 // confirm it (and the rest of the system) survived the child's crash.
 static void crash(const char *kind) {
   if (strcmp(kind, "div0") == 0) {
-    volatile int zero = 0;
-    volatile int result = 1 / zero;
+    // Both operands must be opaque to the optimizer. A literal `1 / zero`
+    // (even with zero volatile) lets GCC strength-reduce division-by-constant
+    // -1/0/1 into a branchless compare that just defines 1/0 as 0, sidestepping
+    // idiv entirely -- no trap, ever. Producing both operands via inline asm
+    // forces a real idiv (and #DE) at runtime.
+    int one, zero;
+    asm volatile("mov $1, %0" : "=r"(one));
+    asm volatile("xor %0, %0" : "=r"(zero));
+    volatile int result = one / zero;
     (void)result;
   } else if (strcmp(kind, "ud2") == 0) {
     asm volatile("ud2");
@@ -22,6 +29,7 @@ static void crash(const char *kind) {
 }
 
 void main(int argc, char *argv[]) {
+
   const char *kind = argc > 1 ? argv[1] : "null";
 
   printf("crashtest: before fork, crash kind=%s\n", kind);

@@ -3,15 +3,15 @@
 
 /**
  * @file Serial port driver for x86_64 architecture.
- * 
+ *
  * @see https://wiki.osdev.org/Serial_Ports
  * @see https://wiki.osdev.org/Serial_Ports#Example
- * 
+ *
  * @brief Initializes the serial port (COM1) for communication.
  * Provides functions to send characters and strings over the serial port.
- * 
+ *
  * @note This driver is designed for the x86_64 architecture and uses I/O port access.
- * And this is used for debugging purposes, 
+ * And this is used for debugging purposes,
  * as it allows the kernel to output messages to a serial console.
  */
 
@@ -21,7 +21,7 @@
 /**
  * @brief Initializes the serial port (COM1) for communication.
  * Configures the baud rate, data bits, parity, and stop bits.
- * 
+ *
  * @see https://wiki.osdev.org/Serial_Ports#Example
  * @return void
  */
@@ -42,19 +42,19 @@ void init_serial() {
 /**
  * @brief Sends a character over the serial port (COM1).
  * Waits until the transmit buffer is empty before sending.
- * 
+ *
  * @param c The character to send.
  * @return void
  */
 void serial_putchar(char c) {
   while (is_transmit_empty(COM1) == 0) {
-    out_portb(COM1, c);
   };
+  out_portb(COM1, c);
 }
 
 /**
  * @brief Prints a string over the serial port (COM1).
- * 
+ *
  * @param c The string to print.
  * @return void
  */
@@ -66,8 +66,8 @@ void serial_print(const char *c) {
 
 /**
  * @brief Checks if the transmit buffer of the serial port (COM1) is empty.
- * 
+ *
  * @param port The I/O port address of the serial port.
  * @return int Returns non-zero if the transmit buffer is empty, zero otherwise.
  */
-int is_transmit_empty(int port) { return in_portb(port) & 0x20; }
+int is_transmit_empty(int port) { return in_portb(port + 5) & 0x20; }

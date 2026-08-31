@@ -206,7 +206,7 @@ void isr_handler(struct interrupt_frame *frame)
         }
     }
 
-    if (frame->int_no < 32)
+    if (frame-> int_no < 32)
     {
         // CPL 3 means the faulting instruction was running as user-mode
         // code (as opposed to a kernel bug, or a bad user pointer
@@ -224,21 +224,17 @@ void isr_handler(struct interrupt_frame *frame)
             current_process->exit_code = -1;
             current_process->state = PROCESS_DEAD;
 
-            // Exceptions run with IF=0 (interrupt gate). schedule() never
-            // returns here for a dead process -- it switches straight into
-            // another process's saved context via switch_task(), which
-            // doesn't touch rflags -- so without this, IF stays 0 forever
-            // and the whole system loses interrupts (timer, keyboard) the
-            // moment this fault fires. Same convention as keyboard_read().
-            asm volatile("sti");
+            // switch_task() saves/restores RFLAGS per-task, so the process we
+            // switch into resumes with its own IF state -- no manual sti()
+            // needed here even though exceptions enter with IF=0.
             schedule();
 
-            // schedule() does not return for a dead process; halt
-            // defensively if it somehow does.
-            for (;;)
-            {
-                asm volatile("hlt");
-            }
+            // // schedule() does not return for a dead process; halt
+            // // defensively if it somehow does.
+            // for (;;)
+            // {
+            //     asm volatile("hlt");
+            // }
         }
 
         serial_print("\n KERNEL PANIC **\n");

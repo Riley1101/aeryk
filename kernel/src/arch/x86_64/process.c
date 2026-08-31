@@ -104,10 +104,10 @@ static void user_thread_stub(void)
 
 /**
  * @brief Sets up the kernel stack for a new process.
- * This function pushes the return stub and zeroed callee-saved registers (rbx, rbp,
- * r12-r15) that switch_task expects onto a fresh kernel stack, and returns
- * the resulting rsp. `stub` is where execution lands the first time this
- * process is switched to.
+ * This function pushes the return stub, zeroed callee-saved registers (rbx, rbp,
+ * r12-r15), and an initial RFLAGS (IF=1) that switch_task expects onto a fresh
+ * kernel stack, and returns the resulting rsp. `stub` is where execution lands
+ * the first time this process is switched to.
  *
  * @param kernel_stack_base The base address of the kernel stack (the lowest address).
  * @param stub The function to execute when the process is first switched to.
@@ -119,12 +119,13 @@ static uint64_t setup_kernel_stack(void *kernel_stack_base,
     uint64_t *stack = (uint64_t *)((uint64_t)kernel_stack_base + PAGE_SIZE);
 
     *(--stack) = (uint64_t)stub;
-    *(--stack) = 0;
-    *(--stack) = 0;
-    *(--stack) = 0;
-    *(--stack) = 0;
-    *(--stack) = 0;
-    *(--stack) = 0;
+    *(--stack) = 0; // r15
+    *(--stack) = 0; // r14
+    *(--stack) = 0; // r13
+    *(--stack) = 0; // r12
+    *(--stack) = 0; // rbp
+    *(--stack) = 0; // rbx
+    *(--stack) = 0x202; // rflags (IF=1, reserved bit 1 set)
 
     return (uint64_t)stack;
 }
