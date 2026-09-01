@@ -1,8 +1,39 @@
 #include <font.h>
 #include <stdint.h>
+#include <string.h>
 #include <tty.h>
+#include <arch/x86_64/drivers/serial.h>
 
 Renderer *global_renderer;
+static volatile int dbg_scroll_depth = 0;
+
+/**
+ * @brief Scrolls the framebuffer content up by one glyph row (16px):
+ * discards the top row and fills the newly exposed bottom row with the
+ * background color. Used by print() when it runs out of vertical room,
+ * so output behaves like a normal scrolling terminal instead of wiping
+ * the whole screen every time it fills up.
+ */
+static void scroll_up(Renderer *renderer) {
+  dbg_scroll_depth++;
+  if (dbg_scroll_depth > 1) {
+    serial_print("[dbg] scroll_up REENTRANT depth>1\n");
+  }
+  uint64_t fb_base = (uint64_t)renderer->framebuffer->base_address;
+  uint64_t stride = (uint64_t)renderer->framebuffer->pixels_per_scan_line * 4;
+  uint64_t row_height = 16;
+  uint64_t height = renderer->framebuffer->height;
+
+  memmove((void *)fb_base, (void *)(fb_base + row_height * stride),
+          (height - row_height) * stride);
+
+  for (uint64_t y = height - row_height; y < height; y++) {
+    for (uint64_t x = 0; x < renderer->framebuffer->width; x++) {
+      *(uint32_t *)(fb_base + 4 * x + y * stride) = BG;
+    }
+  }
+  dbg_scroll_depth--;
+}
 
 /**
  * @brief Initializes the renderer with the specified framebuffer and PSF1 font.
@@ -30,6 +61,20 @@ void init_renderer(Renderer *renderer, FrameBuffer *framebuffer,
  * @return void
  */
 void print(const char *str) {
+  // on_irq1() (keyboard.c) calls print() directly to echo each
+  // keystroke, so this can be re-entered from inside a hardware
+  // interrupt while another print() call is mid-update -- e.g. right
+  // between scroll_up() and the cursor_position.y -= 16 that follows
+  // it. Unlike the old clear()-and-reset-to-(0,0) behavior, that
+  // decrement isn't idempotent: a race there silently double-decrements
+  // y, and enough of those eventually underflow the unsigned coordinate
+  // into a huge value, which put_char() then uses to write far outside
+  // the framebuffer. Save/restore (rather than a blind cli/sti) so this
+  // stays correct if print() is ever itself called with interrupts
+  // already off.
+  uint64_t flags;
+  asm volatile("pushfq; pop %0; cli" : "=r"(flags)::"memory");
+
   char *chr = (char *)str;
   while (*chr != 0) {
     switch (*chr) {
@@ -54,12 +99,14 @@ void print(const char *str) {
       global_renderer->cursor_position.y += 16;
     }
     if (global_renderer->cursor_position.y + 16 > global_renderer->framebuffer->height) {
-      clear(global_renderer, BG, true);
+      scroll_up(global_renderer);
+      global_renderer->cursor_position.y -= 16;
     }
 
     chr++;
   }
 
+  asm volatile("push %0; popfq" ::"r"(flags) : "memory", "cc");
   return;
 }
 

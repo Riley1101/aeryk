@@ -114,6 +114,12 @@ static void init_display(void) {
   }
 
   init_renderer(global_renderer, &f, &psf);
+
+  // Firmware leaves the framebuffer in whatever state it booted with
+  // (plain black on real hardware/QEMU), not the renderer's BG color --
+  // paint it once up front so the untouched area above the cursor
+  // matches the rows print()'s scroll_up() fills in later.
+  clear(global_renderer, BG, true);
 }
 
 /**

@@ -4,6 +4,7 @@
 
 #include <arch/x86_64/fs/vfs.h>
 #include <arch/x86_64/drivers/keyboard.h>
+#include <arch/x86_64/drivers/serial.h>
 
 #include <process.h>
 #include <stdint.h>
@@ -239,6 +240,7 @@ void syscall_handler_c(struct syscall_frame *frame)
     }
     case SYS_readdir:
     {
+        serial_print("[dbg] SYS_readdir enter\n");
         const char *path = (const char *)frame->rdi;
         char *buf = (char *)frame->rsi;
         uint32_t bufsize = (uint32_t)frame->rdx;
@@ -282,11 +284,14 @@ void syscall_handler_c(struct syscall_frame *frame)
             kbuf[written++] = '\n';
         }
 
+        serial_print("[dbg] SYS_readdir before copy_to_user\n");
         if (written > 0 && copy_to_user(buf, kbuf, written) != 0)
         {
+            serial_print("[dbg] SYS_readdir copy_to_user FAILED\n");
             frame->rax = -1;
             break;
         }
+        serial_print("[dbg] SYS_readdir after copy_to_user OK\n");
         frame->rax = written;
         break;
     }
