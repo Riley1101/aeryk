@@ -9,6 +9,7 @@
 #include <stdint.h>
 #include <syscall.h>
 #include <tty.h>
+#include <usercopy.h>
 
 /**
  * @brief Structure representing the state of registers during a system call.
@@ -110,8 +111,13 @@ void syscall_handler_c(struct syscall_frame *frame)
                 }
                 if (bytes_to_read > 0)
                 {
-                    memcpy((void *)frame->rsi,
-                           (uint8_t *)fd->node->data + fd->offset, bytes_to_read);
+                    if (copy_to_user((void *)frame->rsi,
+                                      (uint8_t *)fd->node->data + fd->offset,
+                                      bytes_to_read) != 0)
+                    {
+                        frame->rax = -1;
+                        break;
+                    }
                     fd->offset += bytes_to_read;
                 }
                 frame->rax = bytes_to_read;
@@ -244,6 +250,16 @@ void syscall_handler_c(struct syscall_frame *frame)
             break;
         }
 
+        // Built up in a kernel-side buffer and copied out in one shot at
+        // the end, so a bad `buf` pointer only ever costs the final
+        // copy_to_user() call rather than a partial, hard-to-diagnose
+        // write into userland part way through the loop.
+        char kbuf[512];
+        if (bufsize > sizeof(kbuf))
+        {
+            bufsize = sizeof(kbuf);
+        }
+
         uint32_t written = 0;
         for (vfs_node_t *child = dir->children; child; child = child->next)
         {
@@ -257,13 +273,19 @@ void syscall_handler_c(struct syscall_frame *frame)
             {
                 break;
             }
-            memcpy(buf + written, child->name, namelen);
+            memcpy(kbuf + written, child->name, namelen);
             written += namelen;
             if (child->type == VFS_DIRECTORY)
             {
-                buf[written++] = '/';
+                kbuf[written++] = '/';
             }
-            buf[written++] = '\n';
+            kbuf[written++] = '\n';
+        }
+
+        if (written > 0 && copy_to_user(buf, kbuf, written) != 0)
+        {
+            frame->rax = -1;
+            break;
         }
         frame->rax = written;
         break;
@@ -286,9 +308,11 @@ void syscall_handler_c(struct syscall_frame *frame)
             schedule();
         }
 
-        if (result > 0 && status_user)
+        if (result > 0 && status_user &&
+            copy_to_user(status_user, &status, sizeof(status)) != 0)
         {
-            *status_user = status;
+            frame->rax = -1;
+            break;
         }
         frame->rax = (uint64_t)(int64_t)result;
         break;

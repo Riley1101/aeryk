@@ -246,12 +246,6 @@ static void mount_initramfs(void) {
  * Prints status messages indicating success or failure for each process.
  */
 static void spawn_initial_processes(void) {
-  char *exectest_argv[] = {"/bin/exectest", NULL};
-  if (create_user_process("/bin/exectest", 1, exectest_argv) == NULL) {
-    print("[!] ERROR: failed to load /bin/exectest\n");
-  } else {
-    print("[8] /bin/exectest loaded, switching to Ring 3...\n");
-  }
 
   char *sh_argv[] = {"/bin/sh", NULL};
   if (create_user_process("/bin/sh", 1, sh_argv) == NULL) {
@@ -304,6 +298,7 @@ void kmain(void) {
   mount_initramfs();
 
   init_keyboard();
+
   print("[6] IRQ1 keyboard listening...\n");
 
   init_syscalls();

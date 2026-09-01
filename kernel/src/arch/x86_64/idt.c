@@ -4,6 +4,7 @@
 #include <process.h>
 #include <stdint.h>
 #include <string.h>
+#include <usercopy.h>
 #include <utils.h>
 #include <vmm.h>
 
@@ -206,6 +207,20 @@ void isr_handler(struct interrupt_frame *frame)
         }
     }
 
+    // A page fault (#PF, vector 14, an unmapped-but-canonical pointer) or
+    // a general protection fault (#GP, vector 13, a non-canonical pointer
+    // -- the CPU raises #GP rather than #PF for those, since it rejects
+    // the address before ever walking the page tables) taken while a
+    // syscall is mid-copy_from_user()/copy_to_user() means userland
+    // handed the syscall a bad pointer -- recover back into the copy
+    // call (which reports -1) instead of falling through to the panic
+    // path below, which would otherwise treat a bad user pointer as a
+    // kernel bug. Never returns if it recovers a fault.
+    if (frame->int_no == 14 || frame->int_no == 13)
+    {
+        usercopy_recover_or_return();
+    }
+
     if (frame-> int_no < 32)
     {
         // CPL 3 means the faulting instruction was running as user-mode
@@ -229,12 +244,6 @@ void isr_handler(struct interrupt_frame *frame)
             // needed here even though exceptions enter with IF=0.
             schedule();
 
-            // // schedule() does not return for a dead process; halt
-            // // defensively if it somehow does.
-            // for (;;)
-            // {
-            //     asm volatile("hlt");
-            // }
         }
 
         serial_print("\n KERNEL PANIC **\n");

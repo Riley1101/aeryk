@@ -49,6 +49,7 @@ A x86_64 kernel written in C, booted via the [Limine](https://codeberg.org/Limin
 - [ ] Input and IPC
     -  [x] Keyboard wired to sys_read (fd 0, blocking, line-buffered)
     -  [ ] Pipes / IPC between processes
+
 - [ ] SMP 
 
 - [ ] Compositor
