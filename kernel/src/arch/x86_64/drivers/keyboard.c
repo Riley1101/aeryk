@@ -18,10 +18,10 @@ static char kbd_buf[KBD_BUF_SIZE];
 static uint32_t kbd_head = 0; // next slot to write
 static uint32_t kbd_tail = 0; // next slot to read
 
-// FIFO of processes blocked in keyboard_read() waiting for input.
-// Reuses queue_next/queue_prev since a blocked process isn't in the MLFQ.
-static process_t *kbd_wait_head = NULL;
-static process_t *kbd_wait_tail = NULL;
+// FIFO of processes blocked in keyboard_read() waiting for input, linked
+// via each process's dedicated wait_next/wait_prev fields (kept separate
+// from the MLFQ's queue_next/queue_prev -- see process.h).
+static wait_queue_t kbd_waitq = {0};
 
 static void ps2_wait_write(void) {
   while (in_portb(PS2STATUS_PORT) & 0x02)
@@ -60,32 +60,6 @@ static int kbd_buf_pop(char *out) {
   return 1;
 }
 
-static void kbd_wait_enqueue(process_t *p) {
-  p->queue_next = NULL;
-  p->queue_prev = kbd_wait_tail;
-  if (kbd_wait_tail) {
-    kbd_wait_tail->queue_next = p;
-  } else {
-    kbd_wait_head = p;
-  }
-  kbd_wait_tail = p;
-}
-
-static process_t *kbd_wait_dequeue(void) {
-  process_t *p = kbd_wait_head;
-  if (p) {
-    kbd_wait_head = p->queue_next;
-    if (kbd_wait_head) {
-      kbd_wait_head->queue_prev = NULL;
-    } else {
-      kbd_wait_tail = NULL;
-    }
-    p->queue_next = NULL;
-    p->queue_prev = NULL;
-  }
-  return p;
-}
-
 void on_irq1(struct interrupt_frame *frame) {
   (void)frame;
 
@@ -99,7 +73,7 @@ void on_irq1(struct interrupt_frame *frame) {
 
       kbd_buf_push(c);
 
-      process_t *waiter = kbd_wait_dequeue();
+      process_t *waiter = wait_queue_pop(&kbd_waitq);
       if (waiter) {
         mlfq_enqueue(waiter); // sets state back to PROCESS_READY
       }
@@ -126,8 +100,8 @@ int keyboard_read(char *buf, int count) {
     // Nothing buffered: register as a waiter and yield. cli/sti around the
     // empty-check + enqueue close the race against on_irq1 firing in between
     // (a wakeup there just re-readies us before schedule() switches away).
-    current_process->state = PROCESS_BLOCKED;
-    kbd_wait_enqueue(current_process);
+    current_process->state = PROCESS_BLOCKED_KBD;
+    wait_queue_push(&kbd_waitq, current_process);
     asm volatile("sti");
     schedule();
   }

@@ -46,8 +46,41 @@ typedef enum {
   PROCESS_READY,
   PROCESS_RUNNING,
   PROCESS_BLOCKED,
+  // Blocked in keyboard_read(), already linked into keyboard.c's own
+  // kbd_wait_head/kbd_wait_tail queue (which reuses queue_next/queue_prev)
+  // and woken explicitly by on_irq1() via mlfq_enqueue(). Must never be
+  // touched by wake_blocked_processes()'s generic PROCESS_BLOCKED sweep --
+  // that reuses the very same queue_next/queue_prev fields for MLFQ
+  // linkage, so enqueuing a still-kbd-queued process into the MLFQ
+  // corrupts both lists (this caused a page fault in mlfq_enqueue when
+  // typing at the shell).
+  PROCESS_BLOCKED_KBD,
   PROCESS_DEAD
 } process_state_t;
+
+/**
+ * @brief FIFO of processes parked on some blocking condition (keyboard
+ * input, eventually pipes/wait), linked via each process's wait_next/
+ * wait_prev fields. A single-producer/single-consumer instance per
+ * condition; see wait_queue_push()/wait_queue_pop().
+ */
+typedef struct {
+  struct process *head;
+  struct process *tail;
+} wait_queue_t;
+
+/**
+ * @brief Parks `proc` at the tail of `wq`. Caller is responsible for
+ * setting `proc`'s state (e.g. to a dedicated PROCESS_BLOCKED_* value)
+ * before or after; this only does the linking.
+ */
+void wait_queue_push(wait_queue_t *wq, struct process *proc);
+
+/**
+ * @brief Removes and returns the process at the head of `wq`, or NULL if
+ * empty. Does not touch the process's state.
+ */
+struct process *wait_queue_pop(wait_queue_t *wq);
 
 /**
  * @brief Structure representing a process in the operating system.
@@ -97,18 +130,35 @@ typedef struct process {
   uint32_t ticks_executed;
 
   /**
-   * @brief The entry point function for kernel threads.
-   * This field is used for kernel threads to specify the function to execute when the thread starts
-   * running. It is not used for user processes.
+   * @brief Next process in whichever MLFQ ready queue (mlfq[priority] in
+   * scheduler.c) this process is currently linked into. NULL when not on
+   * a ready queue. Exclusively for MLFQ linkage -- see wait_next/wait_prev
+   * below for the separate link used while blocked.
    */
   struct process *queue_next;
 
   /**
-   * @brief The entry point address for user processes (ELF entry point).
-   * This field is used for user processes to specify the address of the first instruction to execute
-   * when the process starts running in user mode (ring 3).
+   * @brief Previous process in whichever MLFQ ready queue this process is
+   * currently linked into. NULL when not on a ready queue.
    */
   struct process *queue_prev;
+
+  /**
+   * @brief Next process in the generic wait_queue_t (see wait_queue_push/
+   * wait_queue_pop) this process is parked on while blocked -- e.g.
+   * keyboard.c's kbd_waitq. Deliberately a separate field from queue_next:
+   * a blocked process is linked into a wait queue, not the MLFQ, and
+   * aliasing the two link fields let a process be corrupted by being
+   * mistakenly treated as MLFQ-linked while still parked on a wait queue
+   * (see the PROCESS_BLOCKED_KBD comment above).
+   */
+  struct process *wait_next;
+
+  /**
+   * @brief Previous process in the generic wait queue this process is
+   * parked on. NULL when not on a wait queue.
+   */
+  struct process *wait_prev;
 
   /**
    * @brief Pointer to the next process in the process queue.

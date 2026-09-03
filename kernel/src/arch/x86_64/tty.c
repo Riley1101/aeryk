@@ -60,6 +60,34 @@ void init_renderer(Renderer *renderer, FrameBuffer *framebuffer,
  * @param str The string to print.
  * @return void
  */
+static void print_char_locked(char chr) {
+  switch (chr) {
+  case '\n':
+    global_renderer->cursor_position.x = 0;
+    global_renderer->cursor_position.y += 16;
+    break;
+
+  case '\t':
+    global_renderer->cursor_position.x += 8;
+    break;
+
+  default:
+    put_char(global_renderer, chr, global_renderer->cursor_position.x,
+             global_renderer->cursor_position.y);
+    global_renderer->cursor_position.x += 8;
+    break;
+  }
+
+  if (global_renderer->cursor_position.x + 8 > global_renderer->framebuffer->width) {
+    global_renderer->cursor_position.x = 0;
+    global_renderer->cursor_position.y += 16;
+  }
+  if (global_renderer->cursor_position.y + 16 > global_renderer->framebuffer->height) {
+    scroll_up(global_renderer);
+    global_renderer->cursor_position.y -= 16;
+  }
+}
+
 void print(const char *str) {
   // on_irq1() (keyboard.c) calls print() directly to echo each
   // keystroke, so this can be re-entered from inside a hardware
@@ -75,35 +103,20 @@ void print(const char *str) {
   uint64_t flags;
   asm volatile("pushfq; pop %0; cli" : "=r"(flags)::"memory");
 
-  char *chr = (char *)str;
-  while (*chr != 0) {
-    switch (*chr) {
-    case '\n':
-      global_renderer->cursor_position.x = 0;
-      global_renderer->cursor_position.y += 16;
-      break;
+  for (const char *chr = str; *chr != 0; chr++) {
+    print_char_locked(*chr);
+  }
 
-    case '\t':
-      global_renderer->cursor_position.x += 8;
-      break;
+  asm volatile("push %0; popfq" ::"r"(flags) : "memory", "cc");
+  return;
+}
 
-    default:
-      put_char(global_renderer, *chr, global_renderer->cursor_position.x,
-               global_renderer->cursor_position.y);
-      global_renderer->cursor_position.x += 8;
-      break;
-    }
+void print_n(const char *str, size_t n) {
+  uint64_t flags;
+  asm volatile("pushfq; pop %0; cli" : "=r"(flags)::"memory");
 
-    if (global_renderer->cursor_position.x + 8 > global_renderer->framebuffer->width) {
-      global_renderer->cursor_position.x = 0;
-      global_renderer->cursor_position.y += 16;
-    }
-    if (global_renderer->cursor_position.y + 16 > global_renderer->framebuffer->height) {
-      scroll_up(global_renderer);
-      global_renderer->cursor_position.y -= 16;
-    }
-
-    chr++;
+  for (size_t i = 0; i < n; i++) {
+    print_char_locked(str[i]);
   }
 
   asm volatile("push %0; popfq" ::"r"(flags) : "memory", "cc");

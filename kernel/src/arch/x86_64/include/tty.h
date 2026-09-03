@@ -91,6 +91,17 @@ void init_renderer(Renderer *render, FrameBuffer *buffer, struct PSF1_FONT *psf1
 void print(const char *str);
 
 /**
+ * @brief Prints exactly `n` bytes to the screen, regardless of NUL bytes.
+ * Used for syscall writes, where the caller-supplied length is the only
+ * reliable bound -- unlike print(), which stops at the first '\0' and so
+ * is only safe for real NUL-terminated C strings.
+ * @param str The bytes to print.
+ * @param n Number of bytes to print.
+ * @return void
+ */
+void print_n(const char *str, size_t n);
+
+/**
  * @brief Prints a string to the screen with a specified color.
  * @param str The string to print.
  * @param color The color to use for the text.

@@ -154,6 +154,51 @@ static void enqueue_process(process_t *proc)
 }
 
 /**
+ * @brief Parks `proc` at the tail of `wq`, via its wait_next/wait_prev
+ * fields (kept separate from the MLFQ's queue_next/queue_prev so a
+ * process can never be corrupted by being simultaneously treated as
+ * ready-queue-linked while still parked on a wait queue).
+ */
+void wait_queue_push(wait_queue_t *wq, process_t *proc)
+{
+    proc->wait_next = NULL;
+    proc->wait_prev = wq->tail;
+    if (wq->tail)
+    {
+        wq->tail->wait_next = proc;
+    }
+    else
+    {
+        wq->head = proc;
+    }
+    wq->tail = proc;
+}
+
+/**
+ * @brief Removes and returns the process at the head of `wq`, or NULL if
+ * empty.
+ */
+process_t *wait_queue_pop(wait_queue_t *wq)
+{
+    process_t *proc = wq->head;
+    if (proc)
+    {
+        wq->head = proc->wait_next;
+        if (wq->head)
+        {
+            wq->head->wait_prev = NULL;
+        }
+        else
+        {
+            wq->tail = NULL;
+        }
+        proc->wait_next = NULL;
+        proc->wait_prev = NULL;
+    }
+    return proc;
+}
+
+/**
  * @brief Initializes the process scheduler.
  * This function sets up the multi-level feedback queue (MLFQ) scheduler, creates the idle process,
  * and initializes the current process to the idle process. It also allocates a kernel stack for

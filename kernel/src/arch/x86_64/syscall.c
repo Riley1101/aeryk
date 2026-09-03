@@ -137,7 +137,7 @@ void syscall_handler_c(struct syscall_frame *frame)
     case SYS_write:
         if (frame->rdi == 1)
         {
-            print((const char *)frame->rsi);
+            print_n((const char *)frame->rsi, (size_t)frame->rdx);
         }
         frame->rax = frame->rdx;
         break;
