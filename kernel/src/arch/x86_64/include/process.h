@@ -15,16 +15,32 @@
 #define MAX_USER_ARGS 8
 
 /**
+ * @brief What kind of resource a file_descriptor_t slot refers to. The VFS
+ * has no read/write vtable (see vfs.h) and a pipe isn't backed by a
+ * vfs_node_t at all, so this discriminator picks which of `node`/`pipe`
+ * (and which pipe end) a slot's operations should go through.
+ */
+typedef enum {
+  FD_NONE = 0, // free slot
+  FD_VFS,
+  FD_PIPE_READ,
+  FD_PIPE_WRITE,
+} fd_type_t;
+
+struct pipe;
+
+/**
  * @brief Structure representing a file descriptor in a process.
  * This structure contains information about an open file, including a pointer to the corresponding VFS node,
  * the current offset within the file, and any flags associated with the file descriptor.
  */
 typedef struct file_descriptor {
-  vfs_node_t *node;
+  fd_type_t type;
+  vfs_node_t *node;  // valid when type == FD_VFS
+  struct pipe *pipe; // valid when type == FD_PIPE_READ / FD_PIPE_WRITE
   uint32_t offset;
   int flags;
 } file_descriptor_t;
-;
 
 /**
  * @brief Snapshot of a user process's registers at the point it called
@@ -55,6 +71,11 @@ typedef enum {
   // corrupts both lists (this caused a page fault in mlfq_enqueue when
   // typing at the shell).
   PROCESS_BLOCKED_KBD,
+  // Blocked in pipe_read()/pipe_write(), linked into that pipe_t's own
+  // read_waiters/write_waiters queue (see pipe.h). Same reasoning as
+  // PROCESS_BLOCKED_KBD above: must stay out of the generic PROCESS_BLOCKED
+  // sweep so its wait_next/wait_prev linkage isn't fought over.
+  PROCESS_BLOCKED_PIPE,
   PROCESS_DEAD
 } process_state_t;
 
@@ -290,6 +311,16 @@ int exec_process(process_t *proc, const char *path, int argc, char *const argv[]
  * @return The reaped child's pid, 0, or -1.
  */
 int wait_reap_child(process_t *parent, int64_t pid, int *status_out);
+
+/**
+ * @brief Releases every open fd in `proc`'s fd_table: for a pipe end, drops
+ * its reference (see pipe_close_end()) and wakes anything blocked on the
+ * other end; for a VFS fd, just clears the slot. Called once a process is
+ * finished running for good (SYS_exit, or killed by a CPU exception) so
+ * blocked peers on the other end of a pipe aren't left waiting on a dead
+ * process. Idempotent-safe to call again on an already-empty table.
+ */
+void process_release_fds(process_t *proc);
 
 extern process_t *current_process;
 

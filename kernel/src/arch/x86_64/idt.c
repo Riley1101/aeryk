@@ -236,6 +236,7 @@ void isr_handler(struct interrupt_frame *frame)
             serial_print(exception_messages[frame->int_no]);
             serial_print("\n");
 
+            process_release_fds(current_process);
             current_process->exit_code = -1;
             current_process->state = PROCESS_DEAD;
 

@@ -38,6 +38,30 @@ ssize_t write(int fd, const void *buf, size_t count);
 int close(int fd);
 
 /**
+ * @brief Creates an unnamed pipe: a one-way byte stream connecting a read
+ * end and a write end.
+ * @param fds Filled with fds[0] (read end) and fds[1] (write end).
+ * @return Returns 0 on success or -1 on error.
+ */
+int pipe(int fds[2]);
+
+/**
+ * @brief Duplicates a file descriptor onto the lowest-numbered unused fd.
+ * @param oldfd The file descriptor to duplicate.
+ * @return Returns the new file descriptor or -1 on error.
+ */
+int dup(int oldfd);
+
+/**
+ * @brief Duplicates a file descriptor onto a specific fd number, closing
+ * newfd first if it was already open.
+ * @param oldfd The file descriptor to duplicate.
+ * @param newfd The file descriptor number to duplicate it onto.
+ * @return Returns newfd on success or -1 on error.
+ */
+int dup2(int oldfd, int newfd);
+
+/**
  * @brief Forks the calling process, creating a near-identical copy that
  * resumes right after this call.
  * @return Returns 0 in the child, the child's pid in the parent, or -1 on

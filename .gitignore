@@ -8,3 +8,6 @@
 .cache
 compile_commands.json
 initramfs.cpio
+/obj-userland
+/userland/*.elf
+/initramfs_root/bin

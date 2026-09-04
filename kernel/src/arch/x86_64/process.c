@@ -1,5 +1,6 @@
 #include <elf.h>
 #include <gdt.h>
+#include <pipe.h>
 #include <pmm.h>
 #include <process.h>
 #include <scheduler.h>
@@ -580,6 +581,22 @@ process_t *fork_process(process_t *parent, const trapframe_t *regs)
     child->cr3 = (uint64_t)child_pml4 - hhdm_offset;
     child->parent = parent;
     memcpy(child->fd_table, parent->fd_table, sizeof(child->fd_table));
+    // The memcpy above gives the child fds that alias the same pipe_t as
+    // the parent's; bump each aliased pipe's refcount so pipe_close_end()
+    // (in process_release_fds()) doesn't free it out from under whichever
+    // of parent/child still holds it open.
+    for (int i = 0; i < MAX_FDS; i++)
+    {
+        file_descriptor_t *fd = &child->fd_table[i];
+        if (fd->type == FD_PIPE_READ)
+        {
+            fd->pipe->readers++;
+        }
+        else if (fd->type == FD_PIPE_WRITE)
+        {
+            fd->pipe->writers++;
+        }
+    }
 
     child->fork_frame = *regs;
     child->fork_frame.rax = 0; // fork() returns 0 in the child
@@ -593,6 +610,28 @@ process_t *fork_process(process_t *parent, const trapframe_t *regs)
     child->ticks_executed = 0;
     mlfq_enqueue(child);
     return child;
+}
+
+/**
+ * @brief Releases every open fd in `proc`'s fd_table. See process.h.
+ */
+void process_release_fds(process_t *proc)
+{
+    for (int i = 0; i < MAX_FDS; i++)
+    {
+        file_descriptor_t *fd = &proc->fd_table[i];
+        if (fd->type == FD_PIPE_READ)
+        {
+            pipe_close_end(fd->pipe, 1);
+        }
+        else if (fd->type == FD_PIPE_WRITE)
+        {
+            pipe_close_end(fd->pipe, 0);
+        }
+        fd->type = FD_NONE;
+        fd->node = NULL;
+        fd->pipe = NULL;
+    }
 }
 
 /**

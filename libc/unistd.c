@@ -62,6 +62,49 @@ int close(int fd) {
 }
 
 /**
+ * @brief Creates an unnamed pipe.
+ * @param fds Filled with fds[0] (read end) and fds[1] (write end).
+ * @return Returns 0 on success or -1 on error.
+ */
+int pipe(int fds[2]) {
+  long ret;
+  asm volatile("syscall"
+                : "=a"(ret)
+                : "0"(SYS_pipe), "D"(fds)
+                : "rcx", "r11", "memory");
+  return (int)ret;
+}
+
+/**
+ * @brief Duplicates a file descriptor onto the lowest-numbered unused fd.
+ * @param oldfd The file descriptor to duplicate.
+ * @return Returns the new file descriptor or -1 on error.
+ */
+int dup(int oldfd) {
+  long ret;
+  asm volatile("syscall"
+                : "=a"(ret)
+                : "0"(SYS_dup), "D"(oldfd)
+                : "rcx", "r11", "memory");
+  return (int)ret;
+}
+
+/**
+ * @brief Duplicates a file descriptor onto a specific fd number.
+ * @param oldfd The file descriptor to duplicate.
+ * @param newfd The file descriptor number to duplicate it onto.
+ * @return Returns newfd on success or -1 on error.
+ */
+int dup2(int oldfd, int newfd) {
+  long ret;
+  asm volatile("syscall"
+                : "=a"(ret)
+                : "0"(SYS_dup2), "D"(oldfd), "S"(newfd)
+                : "rcx", "r11", "memory");
+  return (int)ret;
+}
+
+/**
  * @brief Forks the calling process.
  * @return Returns 0 in the child, the child's pid in the parent, or -1 on
  * error.

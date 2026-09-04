@@ -6,6 +6,7 @@
 #include <arch/x86_64/drivers/keyboard.h>
 #include <arch/x86_64/drivers/serial.h>
 
+#include <pipe.h>
 #include <process.h>
 #include <stdint.h>
 #include <syscall.h>
@@ -95,15 +96,29 @@ void syscall_handler_c(struct syscall_frame *frame)
     switch (frame->rax)
     {
     case SYS_read:
-        if (frame->rdi == 0)
+        if (frame->rdi == 0 && current_process->fd_table[0].type == FD_PIPE_READ)
+        {
+            // fd 0 was dup2()'d onto a pipe (shell redirection), so read
+            // from that instead of the keyboard.
+            frame->rax = pipe_read(current_process->fd_table[0].pipe,
+                                    (char *)frame->rsi, (int)frame->rdx);
+        }
+        else if (frame->rdi == 0)
         {
             frame->rax = keyboard_read((char *)frame->rsi, (int)frame->rdx);
         }
         else if (frame->rdi >= 3 && frame->rdi < MAX_FDS)
         {
-            // reading from a file
             file_descriptor_t *fd = &current_process->fd_table[frame->rdi];
-            if (fd->node && fd->node->type == VFS_FILE)
+            if (fd->type == FD_PIPE_READ)
+            {
+                // Same convention as keyboard_read() above: written
+                // directly into the user pointer rather than through
+                // copy_to_user(), since it runs in the current process's
+                // own pagetable for the whole blocking loop.
+                frame->rax = pipe_read(fd->pipe, (char *)frame->rsi, (int)frame->rdx);
+            }
+            else if (fd->type == FD_VFS && fd->node->type == VFS_FILE)
             {
                 uint32_t bytes_to_read = frame->rdx;
                 if (fd->offset + bytes_to_read > fd->node->size)
@@ -135,11 +150,28 @@ void syscall_handler_c(struct syscall_frame *frame)
         break;
 
     case SYS_write:
-        if (frame->rdi == 1)
+        if (frame->rdi == 1 && current_process->fd_table[1].type == FD_PIPE_WRITE)
+        {
+            // fd 1 was dup2()'d onto a pipe (shell redirection), so write
+            // there instead of the console.
+            frame->rax = pipe_write(current_process->fd_table[1].pipe,
+                                     (const char *)frame->rsi, (int)frame->rdx);
+        }
+        else if (frame->rdi == 1)
         {
             print_n((const char *)frame->rsi, (size_t)frame->rdx);
+            frame->rax = frame->rdx;
         }
-        frame->rax = frame->rdx;
+        else if (frame->rdi >= 3 && frame->rdi < MAX_FDS &&
+                 current_process->fd_table[frame->rdi].type == FD_PIPE_WRITE)
+        {
+            file_descriptor_t *fd = &current_process->fd_table[frame->rdi];
+            frame->rax = pipe_write(fd->pipe, (const char *)frame->rsi, (int)frame->rdx);
+        }
+        else
+        {
+            frame->rax = -1;
+        }
         break;
     case SYS_open:
     {
@@ -155,7 +187,7 @@ void syscall_handler_c(struct syscall_frame *frame)
         // starts at 3 because 0,1,2 for stdio
         for (int i = 3; i < MAX_FDS; i++)
         {
-            if (current_process->fd_table[i].node == NULL)
+            if (current_process->fd_table[i].type == FD_NONE)
             {
                 fd_index = i;
                 break;
@@ -164,6 +196,7 @@ void syscall_handler_c(struct syscall_frame *frame)
 
         if (fd_index != -1)
         {
+            current_process->fd_table[fd_index].type = FD_VFS;
             current_process->fd_table[fd_index].node = file;
             current_process->fd_table[fd_index].offset = 0;
             current_process->fd_table[fd_index].flags = frame->rsi;
@@ -325,7 +358,18 @@ void syscall_handler_c(struct syscall_frame *frame)
     case SYS_close:
         if (frame->rdi >= 3 && frame->rdi < MAX_FDS)
         {
-            current_process->fd_table[frame->rdi].node = NULL;
+            file_descriptor_t *fd = &current_process->fd_table[frame->rdi];
+            if (fd->type == FD_PIPE_READ)
+            {
+                pipe_close_end(fd->pipe, 1);
+            }
+            else if (fd->type == FD_PIPE_WRITE)
+            {
+                pipe_close_end(fd->pipe, 0);
+            }
+            fd->type = FD_NONE;
+            fd->node = NULL;
+            fd->pipe = NULL;
             frame->rax = 0;
         }
         else
@@ -333,11 +377,145 @@ void syscall_handler_c(struct syscall_frame *frame)
             frame->rax = -1;
         }
         break;
+    case SYS_pipe:
+    {
+        int *user_fds = (int *)frame->rdi;
+
+        int read_fd = -1, write_fd = -1;
+        for (int i = 3; i < MAX_FDS; i++)
+        {
+            if (current_process->fd_table[i].type == FD_NONE)
+            {
+                read_fd = i;
+                break;
+            }
+        }
+        for (int i = read_fd + 1; i < MAX_FDS; i++)
+        {
+            if (current_process->fd_table[i].type == FD_NONE)
+            {
+                write_fd = i;
+                break;
+            }
+        }
+
+        if (read_fd == -1 || write_fd == -1)
+        {
+            frame->rax = -1;
+            break;
+        }
+
+        pipe_t *p = pipe_create();
+        if (!p)
+        {
+            frame->rax = -1;
+            break;
+        }
+
+        current_process->fd_table[read_fd].type = FD_PIPE_READ;
+        current_process->fd_table[read_fd].pipe = p;
+        current_process->fd_table[write_fd].type = FD_PIPE_WRITE;
+        current_process->fd_table[write_fd].pipe = p;
+
+        int fds[2] = {read_fd, write_fd};
+        if (copy_to_user(user_fds, fds, sizeof(fds)) != 0)
+        {
+            pipe_close_end(p, 1);
+            pipe_close_end(p, 0);
+            current_process->fd_table[read_fd].type = FD_NONE;
+            current_process->fd_table[read_fd].pipe = NULL;
+            current_process->fd_table[write_fd].type = FD_NONE;
+            current_process->fd_table[write_fd].pipe = NULL;
+            frame->rax = -1;
+            break;
+        }
+        frame->rax = 0;
+        break;
+    }
+    case SYS_dup:
+    {
+        int oldfd = (int)frame->rdi;
+        if (oldfd < 0 || oldfd >= MAX_FDS ||
+            current_process->fd_table[oldfd].type == FD_NONE)
+        {
+            frame->rax = -1;
+            break;
+        }
+
+        int newfd = -1;
+        for (int i = 3; i < MAX_FDS; i++)
+        {
+            if (current_process->fd_table[i].type == FD_NONE)
+            {
+                newfd = i;
+                break;
+            }
+        }
+        if (newfd == -1)
+        {
+            frame->rax = -1;
+            break;
+        }
+
+        file_descriptor_t *src = &current_process->fd_table[oldfd];
+        current_process->fd_table[newfd] = *src;
+        if (src->type == FD_PIPE_READ)
+        {
+            src->pipe->readers++;
+        }
+        else if (src->type == FD_PIPE_WRITE)
+        {
+            src->pipe->writers++;
+        }
+        frame->rax = newfd;
+        break;
+    }
+    case SYS_dup2:
+    {
+        int oldfd = (int)frame->rdi;
+        int newfd = (int)frame->rsi;
+        if (oldfd < 0 || oldfd >= MAX_FDS || newfd < 0 || newfd >= MAX_FDS ||
+            current_process->fd_table[oldfd].type == FD_NONE)
+        {
+            frame->rax = -1;
+            break;
+        }
+
+        if (newfd == oldfd)
+        {
+            frame->rax = newfd;
+            break;
+        }
+
+        file_descriptor_t *dst = &current_process->fd_table[newfd];
+        if (dst->type == FD_PIPE_READ)
+        {
+            pipe_close_end(dst->pipe, 1);
+        }
+        else if (dst->type == FD_PIPE_WRITE)
+        {
+            pipe_close_end(dst->pipe, 0);
+        }
+
+        file_descriptor_t *src = &current_process->fd_table[oldfd];
+        *dst = *src;
+        if (src->type == FD_PIPE_READ)
+        {
+            src->pipe->readers++;
+        }
+        else if (src->type == FD_PIPE_WRITE)
+        {
+            src->pipe->writers++;
+        }
+        frame->rax = newfd;
+        break;
+    }
     case SYS_exit:
         print("\n[Syscall] Process exited.\n");
 
         if (current_process)
         {
+            process_release_fds(current_process);
             current_process->exit_code = (int)frame->rdi;
             current_process->state = PROCESS_DEAD;
             schedule();
