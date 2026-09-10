@@ -171,14 +171,16 @@ kernel/.deps-obtained:
 # Every userland program is userland/<name>.c -> userland/<name>.elf, linked
 # against crt0.o and the common libc.a. To add a new program, just drop its
 # name in USERLAND_PROGS -- no other Makefile changes needed.
-override USERLAND_PROGS := init cat sh ls tree forktest exectest crashtest usercopytest pipetest
+override USERLAND_PROGS := init cat sh ls tree forktest exectest crashtest usercopytest pipetest sprintftest
 
 override USERLAND_LIBC_SRCS := \
     libc/stdlib/exit.c \
     libc/unistd.c \
     libc/stdio/putchar.c \
     libc/stdio/puts.c \
+    libc/stdio/format.c \
     libc/stdio/printf.c \
+    libc/stdio/sprintf.c \
     libc/string/strlen.c \
     libc/string/strcmp.c \
     libc/string/string.c

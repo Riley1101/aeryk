@@ -6,6 +6,7 @@
 #define EOF (-1)
 
 int printf(const char *restrict format, ...);
+int sprintf(char *restrict str, const char *restrict format, ...);
 
 int putchar(int);
 int puts(const char *restrict format);

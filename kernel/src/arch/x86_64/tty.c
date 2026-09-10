@@ -71,6 +71,16 @@ static void print_char_locked(char chr) {
     global_renderer->cursor_position.x += 8;
     break;
 
+  case '\b':
+    if (global_renderer->cursor_position.x >= 8) {
+      global_renderer->cursor_position.x -= 8;
+    } else if (global_renderer->cursor_position.y >= 16) {
+      global_renderer->cursor_position.y -= 16;
+      global_renderer->cursor_position.x =
+          (global_renderer->framebuffer->width / 8 - 1) * 8;
+    }
+    break;
+
   default:
     put_char(global_renderer, chr, global_renderer->cursor_position.x,
              global_renderer->cursor_position.y);
@@ -137,11 +147,11 @@ void put_char(Renderer *renderer, char chr, unsigned int xOff,
 
   for (unsigned long y = yOff; y < yOff + 16; y++) {
     for (unsigned long x = xOff; x < xOff + 8; x++) {
-      if ((*fontPtr & (0b10000000 >> (x - xOff))) > 0) {
-        *(unsigned int *)(pixPtr + x +
-                          (y * renderer->framebuffer->pixels_per_scan_line)) =
-            renderer->color;
-      }
+      uint32_t pixel_color =
+          (*fontPtr & (0b10000000 >> (x - xOff))) > 0 ? renderer->color : BG;
+      *(unsigned int *)(pixPtr + x +
+                        (y * renderer->framebuffer->pixels_per_scan_line)) =
+          pixel_color;
     }
     fontPtr++;
   }
