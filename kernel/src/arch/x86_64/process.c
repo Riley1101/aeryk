@@ -377,13 +377,16 @@ static uint64_t setup_user_stack_args(void *stack_hhdm_base,
  * @param out_pml4 Set to the new pagetable's HHDM address on success.
  * @param out_entry Set to the ELF entry point on success.
  * @param out_user_stack_top Set to the initial user RSP on success.
+ * @param out_break Set to the initial program break (page-aligned end of
+ * the highest PT_LOAD segment) on success.
  * @return 0 on success, -1 on failure (file missing/not ELF, bad argc/argv,
  * or an allocation failed; any partially-built pagetable is torn down first).
  */
 static int load_elf_into_new_pagetable(const char *path, int argc,
                                        char *const argv[], uint64_t **out_pml4,
                                        uint64_t *out_entry,
-                                       uint64_t *out_user_stack_top)
+                                       uint64_t *out_user_stack_top,
+                                       uint64_t *out_break)
 {
     vfs_node_t *file = vfs_find_node(vfs_root, path);
     if (!file || file->type != VFS_FILE)
@@ -397,8 +400,8 @@ static int load_elf_into_new_pagetable(const char *path, int argc,
         return -1;
     }
 
-    uint64_t entry;
-    if (elf_load(file, pml4, &entry) != 0)
+    uint64_t entry, brk_start;
+    if (elf_load(file, pml4, &entry, &brk_start) != 0)
     {
         vmm_destroy_user_pagetable(pml4);
         return -1;
@@ -425,6 +428,7 @@ static int load_elf_into_new_pagetable(const char *path, int argc,
     *out_pml4 = pml4;
     *out_entry = entry;
     *out_user_stack_top = initial_rsp;
+    *out_break = brk_start;
     return 0;
 }
 
@@ -444,8 +448,9 @@ static int load_elf_into_new_pagetable(const char *path, int argc,
 process_t *create_user_process(const char *path, int argc, char *const argv[])
 {
     uint64_t *pml4;
-    uint64_t entry, initial_rsp;
-    if (load_elf_into_new_pagetable(path, argc, argv, &pml4, &entry, &initial_rsp) != 0)
+    uint64_t entry, initial_rsp, brk_start;
+    if (load_elf_into_new_pagetable(path, argc, argv, &pml4, &entry,
+                                    &initial_rsp, &brk_start) != 0)
     {
         return NULL;
     }
@@ -471,6 +476,8 @@ process_t *create_user_process(const char *path, int argc, char *const argv[])
     proc->state = PROCESS_READY;
     proc->entry = entry;
     proc->user_stack_top = initial_rsp;
+    proc->brk_start = brk_start;
+    proc->brk = brk_start;
     proc->cr3 = (uint64_t)pml4 - hhdm_offset;
     proc->parent = current_process;
 
@@ -506,9 +513,9 @@ process_t *create_user_process(const char *path, int argc, char *const argv[])
 int exec_process(process_t *proc, const char *path, int argc, char *const argv[])
 {
     uint64_t *new_pml4;
-    uint64_t new_entry, new_user_stack_top;
+    uint64_t new_entry, new_user_stack_top, new_brk_start;
     if (load_elf_into_new_pagetable(path, argc, argv, &new_pml4, &new_entry,
-                                    &new_user_stack_top) != 0)
+                                    &new_user_stack_top, &new_brk_start) != 0)
     {
         return -1;
     }
@@ -519,6 +526,8 @@ int exec_process(process_t *proc, const char *path, int argc, char *const argv[]
     proc->cr3 = (uint64_t)new_pml4 - hhdm_offset;
     proc->entry = new_entry;
     proc->user_stack_top = new_user_stack_top;
+    proc->brk_start = new_brk_start;
+    proc->brk = new_brk_start;
 
     asm volatile("mov %0, %%cr3" : : "r"(proc->cr3) : "memory");
 
@@ -578,6 +587,8 @@ process_t *fork_process(process_t *parent, const trapframe_t *regs)
     child->state = PROCESS_READY;
     child->entry = parent->entry;
     child->user_stack_top = parent->user_stack_top;
+    child->brk_start = parent->brk_start;
+    child->brk = parent->brk;
     child->cr3 = (uint64_t)child_pml4 - hhdm_offset;
     child->parent = parent;
     memcpy(child->fd_table, parent->fd_table, sizeof(child->fd_table));

@@ -51,8 +51,11 @@ typedef struct {
 } __attribute__((packed)) Elf64_Phdr;
 
 // Loads the PT_LOAD segments of an ELF64 executable into the given
-// pagetable. Returns 0 on success and writes the program entry point
-// to *out_entry, or -1 on failure.
-int elf_load(vfs_node_t *file, uint64_t *pml4, uint64_t *out_entry);
+// pagetable. Returns 0 on success and writes the program entry point to
+// *out_entry and the page-aligned end of the highest PT_LOAD segment (the
+// initial program break, for brk()/malloc()) to *out_break, or -1 on
+// failure.
+int elf_load(vfs_node_t *file, uint64_t *pml4, uint64_t *out_entry,
+             uint64_t *out_break);
 
 #endif // !ELF_H

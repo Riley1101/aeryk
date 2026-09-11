@@ -214,6 +214,20 @@ typedef struct process {
    */
   uint64_t user_stack_top; // top of the user stack (ring 3)
 
+  /**
+   * @brief The initial program break: the page-aligned end of the highest
+   * PT_LOAD segment, as computed by elf_load(). The heap ([brk_start, brk))
+   * always starts here and never shrinks below it.
+   */
+  uint64_t brk_start;
+
+  /**
+   * @brief The current program break (end of the heap). Grown by SYS_brk,
+   * which maps fresh zeroed pages to cover [brk_start, brk) on demand.
+   * malloc()/sbrk() in userland are built on top of this.
+   */
+  uint64_t brk;
+
   file_descriptor_t fd_table[MAX_FDS];
 
   /**

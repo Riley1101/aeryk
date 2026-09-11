@@ -7,11 +7,13 @@
 #include <arch/x86_64/drivers/serial.h>
 
 #include <pipe.h>
+#include <pmm.h>
 #include <process.h>
 #include <stdint.h>
 #include <syscall.h>
 #include <tty.h>
 #include <usercopy.h>
+#include <vmm.h>
 
 /**
  * @brief Structure representing the state of registers during a system call.
@@ -353,6 +355,54 @@ void syscall_handler_c(struct syscall_frame *frame)
             break;
         }
         frame->rax = (uint64_t)(int64_t)result;
+        break;
+    }
+    case SYS_brk:
+    {
+        // Query form: SYS_brk(0) just reports the current break, matching
+        // the userland sbrk(0) convention (no valid program ever legitimately
+        // asks to set its break to address 0).
+        uint64_t requested = frame->rdi;
+        if (requested == 0)
+        {
+            frame->rax = current_process->brk;
+            break;
+        }
+
+        if (requested < current_process->brk_start)
+        {
+            frame->rax = current_process->brk;
+            break;
+        }
+
+        uint64_t old_top = (current_process->brk + PAGE_SIZE - 1) & ~(uint64_t)(PAGE_SIZE - 1);
+        uint64_t new_top = (requested + PAGE_SIZE - 1) & ~(uint64_t)(PAGE_SIZE - 1);
+
+        if (new_top > old_top)
+        {
+            // Growing: map fresh zeroed pages to cover the new range. Pages
+            // already mapped for the shrink case below are left in place
+            // (not unmapped) rather than freed, so a shrink-then-grow within
+            // the same page range doesn't need to re-fault/re-zero anything
+            // an in-flight pointer might still reference.
+            uint64_t *pml4 = (uint64_t *)(current_process->cr3 + hhdm_offset);
+            for (uint64_t page = old_top; page < new_top; page += PAGE_SIZE)
+            {
+                void *phys = pmm_alloc_page();
+                if (!phys)
+                {
+                    frame->rax = current_process->brk;
+                    goto brk_done;
+                }
+                memset((void *)((uint64_t)phys + hhdm_offset), 0, PAGE_SIZE);
+                vmm_map_page(pml4, page, (uint64_t)phys,
+                             PTE_PRESENT | PTE_WRITABLE | PTE_USER | PTE_NX);
+            }
+        }
+
+        current_process->brk = requested;
+        frame->rax = requested;
+    brk_done:
         break;
     }
     case SYS_close:

@@ -2,6 +2,7 @@
 #define _UNISTD_H 1
 
 #include <stddef.h>
+#include <stdint.h>
 
 typedef long ssize_t;
 
@@ -88,6 +89,28 @@ int execve(const char *path, char *const argv[]);
  * @return Returns the pid of the terminated child or -1 on error.
  */
 int wait(int pid, int *status);
+
+/**
+ * @brief Sets the process's program break (the end of its heap) to `addr`.
+ * @param addr The new break address; must be >= the initial break set by
+ * the ELF loader (heap can't shrink past the program's own segments).
+ * @return The resulting break address (== addr on success), which may be
+ * unchanged from before if `addr` was invalid or allocation failed -- the
+ * caller must compare against the old break to detect failure.
+ */
+uint64_t brk(uint64_t addr);
+
+/**
+ * @brief Grows (or shrinks) the process's heap by `increment` bytes.
+ * The malloc()/free()/calloc() implementation in stdlib.h is built on
+ * top of this.
+ * @param increment Bytes to extend the break by; 0 just queries the
+ * current break. Negative values are rejected (this kernel's SYS_brk
+ * doesn't support shrinking past already-mapped pages).
+ * @return The break address *before* the call (the start of the newly
+ * grown region), or (void *)-1 on failure.
+ */
+void *sbrk(int64_t increment);
 
 /**
  * @brief Lists the entries of a directory into a buffer.

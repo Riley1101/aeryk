@@ -152,6 +152,42 @@ int wait (int pid, int *status) {
 }
 
 /**
+ * @brief Sets the process's program break.
+ * @param addr The new break address.
+ * @return The resulting break address.
+ */
+uint64_t brk(uint64_t addr) {
+  long ret;
+  asm volatile("syscall"
+                : "=a"(ret)
+                : "0"(SYS_brk), "D"(addr)
+                : "rcx", "r11", "memory");
+  return (uint64_t)ret;
+}
+
+/**
+ * @brief Grows (or shrinks) the process's heap by `increment` bytes.
+ * @param increment Bytes to extend the break by; 0 just queries the
+ * current break.
+ * @return The break address before the call, or (void *)-1 on failure.
+ */
+void *sbrk(int64_t increment) {
+  uint64_t old_brk = brk(0);
+  if (increment == 0) {
+    return (void *)old_brk;
+  }
+  if (increment < 0) {
+    return (void *)-1;
+  }
+
+  uint64_t new_brk = brk(old_brk + (uint64_t)increment);
+  if (new_brk != old_brk + (uint64_t)increment) {
+    return (void *)-1;
+  }
+  return (void *)old_brk;
+}
+
+/**
  * @brief Lists the entries of a directory into a buffer.
  * @param path The path to the directory.
  * @param buf Destination buffer.

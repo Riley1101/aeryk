@@ -15,6 +15,7 @@
 #define SYS_write 1
 #define SYS_open 2
 #define SYS_close 3
+#define SYS_brk 12
 #define SYS_pipe 22
 #define SYS_dup 32
 #define SYS_dup2 33

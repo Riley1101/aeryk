@@ -11,7 +11,8 @@ static inline uint64_t page_align_up(uint64_t addr) {
   return (addr + PAGE_SIZE - 1) & ~(uint64_t)(PAGE_SIZE - 1);
 }
 
-int elf_load(vfs_node_t *file, uint64_t *pml4, uint64_t *out_entry) {
+int elf_load(vfs_node_t *file, uint64_t *pml4, uint64_t *out_entry,
+             uint64_t *out_break) {
   if (!file || !file->data) {
     return -1;
   }
@@ -25,6 +26,8 @@ int elf_load(vfs_node_t *file, uint64_t *pml4, uint64_t *out_entry) {
 
   Elf64_Phdr *phdrs =
       (Elf64_Phdr *)((uint8_t *)file->data + ehdr->e_phoff);
+
+  uint64_t highest_end = 0;
 
   for (uint16_t i = 0; i < ehdr->e_phnum; i++) {
     Elf64_Phdr *ph = &phdrs[i];
@@ -72,8 +75,13 @@ int elf_load(vfs_node_t *file, uint64_t *pml4, uint64_t *out_entry) {
 
       vmm_map_page(pml4, page_vaddr, (uint64_t)phys, flags);
     }
+
+    if (seg_end > highest_end) {
+      highest_end = seg_end;
+    }
   }
 
   *out_entry = ehdr->e_entry;
+  *out_break = highest_end;
   return 0;
 }

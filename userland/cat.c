@@ -2,15 +2,15 @@
 #include <unistd.h>
 
 int main(int argc, char **argv) {
-  if (argc < 2) {
-    printf("usage: cat <file>\n");
-    return 1;
-  }
-
-  int fd = open(argv[1]);
-  if (fd < 0) {
-    printf("cat: %s: No such file\n", argv[1]);
-    return 1;
+  // With no file argument, read from stdin -- this is what makes `cat`
+  // useful as the tail end of a pipeline (e.g. `ls | cat`).
+  int fd = 0;
+  if (argc >= 2) {
+    fd = open(argv[1]);
+    if (fd < 0) {
+      printf("cat: %s: No such file\n", argv[1]);
+      return 1;
+    }
   }
 
   char buf[128];
@@ -19,6 +19,8 @@ int main(int argc, char **argv) {
     write(1, buf, n);
   }
 
-  close(fd);
+  if (fd != 0) {
+    close(fd);
+  }
   return 0;
 }

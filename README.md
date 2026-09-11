@@ -48,9 +48,10 @@ A x86_64 kernel written in C, booted via the [Limine](https://codeberg.org/Limin
 - [x] Elf loader
 - [x] libc wrapper for syscalls
   - [x] Some fun libc Programs (init, cat, sh)
-- [ ] Input and IPC
+- [x] Input and IPC
   - [x] Keyboard wired to sys_read (fd 0, blocking, line-buffered)
   - [x] Pipes / IPC between processes
+  - [x] Shell pipelines (`cmd1 | cmd2 | ...`), wiring dup2 across forked stages
 
 - [ ] Syscall hardening
   - [ ] errno (syscalls currently collapse all failures to -1)
@@ -61,9 +62,9 @@ A x86_64 kernel written in C, booted via the [Limine](https://codeberg.org/Limin
   - [ ] QEMU headless boot + serial-output assert in CI (catches boot hangs / triple faults / taskswitch-class regressions that host-side unit tests can't see)
 
 - [ ] Userland memory management (prerequisite for compositor)
-  - [ ] Userland heap allocation (brk / anonymous mmap)
+  - [x] Userland heap allocation (brk)
   - [ ] Shared memory mapping between processes (mmap MAP_SHARED)
-  - [ ] stdlib.c: malloc, free, calloc (libc wrappers over the above)
+  - [x] stdlib.c: malloc, free, calloc (libc wrappers over the above)
 
 - [ ] SMP (I have no clue what this is)
 
