@@ -6,6 +6,12 @@
 #define PTE_WRITABLE (1ull << 1)
 #define PTE_USER (1ull << 2)
 #define PTE_NX (1ull << 63)
+// PWT (page write-through), bit 3. Combined with PCD=0 (bit 4, left clear)
+// and the PAT bit (bit 7, also left clear -- out of reach for 4KB pages
+// without it), this selects PAT slot 1 -- see vmm_init_pat(). Used only on
+// the framebuffer mapping (SYS_fbmap) to get write-combining instead of
+// the write-back every other page implicitly gets via PAT slot 0.
+#define PTE_PWT (1ull << 3)
 // Bits 9-11 are ignored by the MMU for present entries, so they're free for
 // the OS to repurpose. Used to mark a page shared copy-on-write after
 // fork(): PTE_WRITABLE is cleared and this bit set on both parent and
@@ -36,6 +42,19 @@
  * from the CR3 register and storing it in a global variable for later use.
  */
 void init_vmm(void);
+
+/**
+ * @brief Reprograms PAT slot 1 (selected by a PTE with PWT=1, PCD=0) from
+ * its power-on default of write-through to write-combining (WC), leaving
+ * slot 0 (PWT=0, PCD=0 -- what every other present PTE in this kernel
+ * implicitly uses, having never set PWT/PCD/PAT) at write-back. WC lets
+ * the CPU buffer and burst writes to the framebuffer instead of either
+ * serializing every store (uncached) or paying cache-coherency overhead
+ * for a region the CPU never reads back (write-back) -- the standard
+ * choice for a linear framebuffer. Must run before anything maps a page
+ * with PTE_PWT set (SYS_fbmap), so this is called once from init_vmm().
+ */
+void vmm_init_pat(void);
 
 /**
  * @brief Maps a virtual address to a physical address in the specified PML4 with the given flags.

@@ -3,6 +3,7 @@
 #include <sys/mman.h>
 #include <sys/mouse.h>
 #include <sys/fb.h>
+#include <sys/tsc.h>
 #include <abi/clone.h>
 #include <errno.h>
 #include <stdlib.h>
@@ -298,6 +299,18 @@ int mouse_read(mouse_packet_t *buf, int max_packets) {
                 : "0"(SYS_mouse_read), "D"(buf), "S"(max_packets)
                 : "rcx", "r11", "memory");
   return (int)syscall_ret(ret);
+}
+
+/**
+ * @brief Returns the calibrated TSC frequency in Hz. See sys/tsc.h.
+ */
+uint64_t get_tsc_hz(void) {
+  long ret;
+  asm volatile("syscall"
+                : "=a"(ret)
+                : "0"(SYS_get_tsc_hz)
+                : "rcx", "r11", "memory");
+  return (uint64_t)syscall_ret(ret);
 }
 
 /**

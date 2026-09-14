@@ -2,9 +2,27 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+#include <utils.h>
 #include <vmm.h>
 
 static uint64_t *kernel_pml4 = NULL;
+
+#define MSR_PAT 0x277
+
+/**
+ * @brief See vmm.h. Reprograms PAT slot 1 to write-combining.
+ *
+ * The PAT MSR is 8 bytes, one per slot, encoding a memory type per byte
+ * (0=UC, 1=WC, 4=WT, 5=WP, 6=WB, 7=UC-). The architectural power-on
+ * default is 0x0007040600070406 (from PA7 down to PA0: UC, UC-, WT, WB,
+ * UC, UC-, WT, WB) -- slot 0 is WB (what every untouched PTE already
+ * resolves to) and slot 1 is WT (rarely useful, safe to repurpose). This
+ * changes only slot 1's byte, 0x04 -> 0x01, leaving every other slot (and
+ * therefore every page that isn't explicitly marked PTE_PWT) untouched.
+ */
+void vmm_init_pat(void) {
+  wrmsr(MSR_PAT, 0x0007040600070106ULL);
+}
 
 /**
  * @brief Retrieves the next level of the page table for a given entry index.
@@ -350,4 +368,6 @@ void init_vmm(void) {
   // The mask 0x000FFFFFFFFFF000 clears those flag bits and ensures the address
   // is page-aligned
   kernel_pml4 = (uint64_t *)((cr3 & 0x000FFFFFFFFFF000) + hhdm_offset);
+
+  vmm_init_pat();
 }

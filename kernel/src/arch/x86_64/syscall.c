@@ -15,6 +15,7 @@
 #include <process.h>
 #include <stdint.h>
 #include <syscall.h>
+#include <timer.h>
 #include <tty.h>
 #include <usercopy.h>
 #include <vmm.h>
@@ -699,7 +700,12 @@ void syscall_handler_c(struct syscall_frame *frame)
         // physical pages already exist (Limine's framebuffer, not
         // pmm_alloc_page()), so every mapped PTE is tagged PTE_NOPMM --
         // see vmm.h for why unmap/destroy/clone must never pmm_free_page()
-        // or pmm_page_ref_inc() an LFB frame.
+        // or pmm_page_ref_inc() an LFB frame. Also tagged PTE_PWT for
+        // write-combining (vmm_init_pat()) -- this mapping is written to
+        // constantly and never read back, exactly the access pattern WC is
+        // for; the kernel's own HHDM mapping of the same physical range
+        // (used by tty.c) is untouched here, since Limine set that one up
+        // before init_vmm() ever ran.
         FrameBuffer *fb = global_renderer->framebuffer;
         uint64_t phys_base = (uint64_t)fb->base_address - hhdm_offset;
         uint64_t size = fb->buffer_size;
@@ -708,7 +714,8 @@ void syscall_handler_c(struct syscall_frame *frame)
         uint64_t base = current_process->mmap_next;
         uint64_t *pml4 = (uint64_t *)(current_process->cr3 + hhdm_offset);
 
-        uint64_t pte_flags = PTE_PRESENT | PTE_WRITABLE | PTE_USER | PTE_NX | PTE_NOPMM;
+        uint64_t pte_flags =
+            PTE_PRESENT | PTE_WRITABLE | PTE_USER | PTE_NX | PTE_NOPMM | PTE_PWT;
         for (uint64_t i = 0; i < npages; i++)
         {
             vmm_map_page(pml4, base + i * PAGE_SIZE, phys_base + i * PAGE_SIZE, pte_flags);
@@ -730,6 +737,14 @@ void syscall_handler_c(struct syscall_frame *frame)
         frame->rax = base;
         break;
     }
+
+    case SYS_get_tsc_hz:
+        // Lets userland convert its own rdtsc() deltas (a plain
+        // instruction, no syscall needed to read the counter itself) into
+        // real time -- see utils.h's rdtsc() and timer.h's tsc_hz for the
+        // kernel-side half of this.
+        frame->rax = tsc_hz;
+        break;
 
     case SYS_exit:
         if (current_process)

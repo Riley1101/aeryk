@@ -109,8 +109,8 @@ A x86_64 kernel written in C, booted via the [Limine](https://codeberg.org/Limin
 
 - [ ] Compositor (GUI land — the goal before circling back to threads/SMP)
   - [x] Framebuffer mapped into userland — SYS_fbmap maps the LFB's physical pages (not PMM-owned, so tagged PTE_NOPMM -- see vmm.h) into the caller out of the same MMAP_BASE bump region as SYS_mmap; regular munmap() tears it back down. userland/fbtest.c verified interactively under QEMU (color bars painted directly into the mapped buffer, repeated map/unmap/exit cycles left the PMM/COW machinery intact per malloctest/shmtest afterward)
-  - [ ] Word-sized memcpy (currently byte-at-a-time, too slow for full-frame blits)
-  - [ ] Write-combining framebuffer mapping (PAT/MTRR)
+  - [x] Word-sized memcpy — memcpy/memset/memmove in both kernel/src/arch/x86_64/string.c and libc/string/string.c now move 8 bytes/iteration (via an `aligned(1), may_alias` uint64_t alias, so no strict-aliasing/alignment UB) with a byte-wise tail; memmove's backward-copy path peels the unaligned tail first, then walks whole words down. Verified under QEMU: 30x `ls` to force repeated scroll_up() (kernel memmove), plus malloctest/sprintftest/pipetest/usercopytest/forktest/clonetest/shmtest/fbtest all still pass
+  - [x] Write-combining framebuffer mapping (PAT/MTRR) — vmm_init_pat() (called from init_vmm()) reprograms PAT slot 1 from write-through to write-combining, leaving slot 0 (write-back, what every other PTE already resolves to) untouched; SYS_fbmap's mapping is now tagged PTE_PWT to select that slot. Only the userland fbmap mapping changed -- the kernel's own HHDM framebuffer pointer (tty.c) is a separate, Limine-established mapping left as-is. Verified: fbtest still paints/unmaps cleanly post-change
   - [ ] Compositor protocol over IPC (windows, damage rects, input events)
   - [ ] Redraw / vsync trigger off the existing timer
   - [ ] Window/surface data structure (position, z-order, shared buffer)
@@ -129,10 +129,11 @@ A x86_64 kernel written in C, booted via the [Limine](https://codeberg.org/Limin
 - [ ] SMP (I have no clue what this is) — the actual point of doing Threading above: without SMP, "threads" only means multiple schedulable contexts sharing memory on one CPU, not concurrent execution
 
 - [ ] Benchmarking (rdtsc + serial print, wired into CI as regression guardrails once the QEMU smoke test above exists) — the payoff: single-core vs. SMP-parallel comparisons once both exist
+  - [x] rdtsc infra — utils.h's rdtsc() (kernel) / sys/tsc.h's rdtsc() (userland, a plain instruction, no syscall needed to read it) plus tsc_hz calibrated once at boot in timer.c's init_timer() against the same PIT 10ms one-shot reference lapic_calibrate() already used; SYS_get_tsc_hz/get_tsc_hz() lets userland convert its own deltas to real time
   - [ ] Context switch latency (switch.asm)
   - [ ] Syscall entry/exit overhead (syscall_entry.asm)
   - [ ] Allocator alloc/free latency (slab now, malloc once userland heap lands)
-  - [ ] Framebuffer blit throughput — needed to prove the word-sized memcpy fix above actually helps
+  - [x] Framebuffer blit throughput — needed to prove the word-sized memcpy fix above actually helps. userland/fbtest.c times 20 full-frame memcpy()s into the mapped (write-combining) framebuffer: ~2754 MB/s under QEMU TCG (note: TCG's software-emulated display is backed by ordinary host RAM, so the WC-vs-WB differential this measures is architecturally correct but won't show up strongly until run on real hardware/KVM against an actual MMIO LFB)
   - [ ] Single-core vs. SMP compositor throughput once both Threading and SMP land — the comparison this whole sequence is building toward
 
 - [ ] ptmalloc-style allocator (currently a single-free-list K&R allocator; move toward glibc's design) — low priority, orthogonal to the GUI/threading path above
