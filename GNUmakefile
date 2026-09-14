@@ -173,6 +173,15 @@ kernel/.deps-obtained:
 # name in USERLAND_PROGS -- no other Makefile changes needed.
 override USERLAND_PROGS := init cat sh ls tree forktest exectest crashtest usercopytest pipetest sprintftest malloctest clonetest shmtest mousetest fbtest clear
 
+# Rust userland programs: userland/<name>.elf built from a staticlib in
+# crates/user (one crate = one program for now, see crates/user/Cargo.toml)
+# instead of userland/<name>.c, linked against the same crt0.o/libc.a as
+# every C program. To add another, add its crate name here and give it an
+# explicit userland/<name>.elf rule below (mirroring rusthello's), since
+# each Rust program is its own crate/staticlib, unlike the single shared
+# %.c.o pattern rule the C programs use.
+override USERLAND_RUST_PROGS := rusthello
+
 override USERLAND_LIBC_SRCS := \
     libc/errno.c \
     libc/stdlib/exit.c \
@@ -188,7 +197,7 @@ override USERLAND_LIBC_SRCS := \
     libc/string/string.c
 
 override USERLAND_LIBC_OBJS := $(patsubst libc/%.c,obj-userland/libc/%.o,$(USERLAND_LIBC_SRCS))
-override USERLAND_ELFS := $(addprefix userland/,$(addsuffix .elf,$(USERLAND_PROGS)))
+override USERLAND_ELFS := $(addprefix userland/,$(addsuffix .elf,$(USERLAND_PROGS) $(USERLAND_RUST_PROGS)))
 
 # Keep chained pattern-rule intermediates (e.g. obj-userland/init.c.o) around
 # instead of letting make delete them as throwaway intermediates.
@@ -210,6 +219,27 @@ obj-userland/crt0.o: kernel/src/arch/x86_64/crt0.asm
 obj-userland/%.c.o: userland/%.c
 	mkdir -p $(dir $@)
 	$(USER_CC) $(USERLAND_CFLAGS) -c $< -o $@
+
+# Rust userland bridge (crates/user), same shape as the kernel's rust-lib
+# rule: built against a freestanding target spec whose codegen flags
+# (no SSE/MMX/x87, no redzone, static/non-PIE) match USERLAND_CFLAGS above,
+# so it links straight into the same crt0.o/libc.a every C program uses.
+override RUST_USER_DIR := crates/user
+override RUST_USER_TARGET := crates/targets/x86_64-aeryk-user.json
+override RUST_USER_PROFILE := release
+override RUST_USER_LIB := $(RUST_USER_DIR)/target/x86_64-aeryk-user/$(RUST_USER_PROFILE)/libaeryk_user_rusthello.a
+override RUST_USER_STAGED_LIB := obj-userland/libaeryk_user_rusthello.a
+
+.PHONY: rust-user-lib
+rust-user-lib:
+	cd $(RUST_USER_DIR) && cargo +nightly build -Zbuild-std=core -Zjson-target-spec \
+		--target ../targets/x86_64-aeryk-user.json --$(RUST_USER_PROFILE)
+	mkdir -p "$(dir $(RUST_USER_STAGED_LIB))"
+	cp $(RUST_USER_LIB) $(RUST_USER_STAGED_LIB)
+
+userland/rusthello.elf: rust-user-lib userland/linker.lds obj-userland/crt0.o obj-userland/libc.a
+	$(USER_LD) -nostdlib -static -m elf_x86_64 -T userland/linker.lds \
+		obj-userland/crt0.o $(RUST_USER_STAGED_LIB) obj-userland/libc.a -o $@
 
 userland/%.elf: obj-userland/%.c.o userland/linker.lds obj-userland/crt0.o obj-userland/libc.a
 	$(USER_LD) -nostdlib -static -m elf_x86_64 -T userland/linker.lds \
@@ -341,6 +371,7 @@ docs-clean:
 distclean:
 	$(MAKE) -C kernel distclean
 	rm -rf iso_root *.iso *.hdd limine edk2-ovmf unity tests/bin docs
+	cd crates/user && cargo clean
 
 .PHONY: debug
 debug: edk2-ovmf $(IMAGE_NAME).iso
