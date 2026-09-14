@@ -196,10 +196,34 @@ all: bin-$(ARCH)/$(OUTPUT)
 # Include header dependencies.
 -include $(HEADER_DEPS)
 
+# Rust bridge (crates/kernel). Built with cargo against the freestanding
+# custom target spec so its codegen flags (no SSE/MMX/x87, -mcmodel=kernel,
+# no redzone) match this kernel build. Only built for x86_64 for now.
+ifeq ($(ARCH),x86_64)
+override RUST_DIR := ../crates/kernel
+override RUST_TARGET := ../crates/targets/x86_64-aeryk.json
+override RUST_PROFILE := release
+override RUST_LIB := $(RUST_DIR)/target/x86_64-aeryk/$(RUST_PROFILE)/libaeryk_kernel.a
+override RUST_STAGED_LIB := obj-$(ARCH)/libaeryk_kernel.a
+
+.PHONY: rust-lib
+rust-lib:
+	cd $(RUST_DIR) && cargo +nightly build -Zbuild-std=core -Zjson-target-spec \
+		--target ../targets/x86_64-aeryk.json --$(RUST_PROFILE)
+	mkdir -p "$(dir $(RUST_STAGED_LIB))"
+	cp $(RUST_LIB) $(RUST_STAGED_LIB)
+endif
+
 # Link rules for the final executable.
+ifeq ($(ARCH),x86_64)
+bin-$(ARCH)/$(OUTPUT): GNUmakefile linker-scripts/$(ARCH).lds $(OBJ) rust-lib
+	mkdir -p "$(dir $@)"
+	$(LD) $(LDFLAGS) $(OBJ) $(RUST_STAGED_LIB) -o $@
+else
 bin-$(ARCH)/$(OUTPUT): GNUmakefile linker-scripts/$(ARCH).lds $(OBJ)
 	mkdir -p "$(dir $@)"
 	$(LD) $(LDFLAGS) $(OBJ) -o $@
+endif
 
 # Compilation rules for *.c files.
 obj-$(ARCH)/%.c.o: %.c GNUmakefile
@@ -227,6 +251,7 @@ clean:
 .PHONY: distclean
 distclean:
 	rm -rf bin-* obj-* .deps-obtained .cache compile_commands.json freestnd-c-hdrs cc-runtime limine-protocol
+	cd ../crates/kernel && cargo clean
 
 # Install the final built executable to its final on-root location.
 .PHONY: install
