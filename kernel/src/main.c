@@ -1,4 +1,5 @@
 #include <arch/x86_64/drivers/keyboard.h>
+#include <arch/x86_64/drivers/mouse.h>
 #include <arch/x86_64/drivers/serial.h>
 #include <arch/x86_64/fs/initramfs.h>
 
@@ -132,6 +133,9 @@ static void init_apic_timer(void) {
 
   // Route irq 1 to idt 33
   ioapic_set_irq(1, 0, 33);
+
+  // Route irq 12 (PS/2 mouse, second 8042 port) to idt 44
+  ioapic_set_irq(12, 0, 44);
 
   uint32_t svr = lapic_read(LAPIC_SVR);
   if ((svr & 0x100) != 0) {
@@ -309,6 +313,10 @@ void kmain(void) {
   init_keyboard();
 
   print("[6] IRQ1 keyboard listening...\n");
+
+  init_mouse();
+
+  print("[6] IRQ12 mouse listening...\n");
 
   init_syscalls();
 

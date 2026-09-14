@@ -61,12 +61,17 @@ A x86_64 kernel written in C, booted via the [Limine](https://codeberg.org/Limin
   - [x] Finish serial driver (currently debug-only, "not complete") — needed as the output channel for a CI smoke test
   - [x] QEMU headless boot + serial-output assert in CI (catches boot hangs / triple faults / taskswitch-class regressions that host-side unit tests can't see)
 
-- [ ] Userland memory management (prerequisite for compositor)
+- [x] Userland memory management (prerequisite for compositor)
   - [x] Userland heap allocation (brk)
   - [x] Shared memory mapping between processes (mmap MAP_SHARED) — needed for compositor client/server shared buffers
   - [x] stdlib.c: malloc, free, calloc (libc wrappers over the above)
 
-- [ ] Mouse driver (PS/2) — lands before compositor windowing, not in parallel
+- [x] Mouse driver (PS/2) — lands before compositor windowing, not in parallel
+  - [x] 8042 controller: enable second PS/2 port, unmask its clock/IRQ12 in the config byte
+  - [x] Device init (set defaults, enable data reporting) and IRQ12 → IDT vector 44 routing via the IOAPIC
+  - [x] 3-byte packet decode (signed dx/dy, button state, overflow/desync handling) into a ring buffer, mirroring the keyboard driver's producer/consumer + wait-queue design (PROCESS_BLOCKED_MOUSE)
+  - [x] SYS_mouse_read syscall + libc sys/mouse.h wrapper
+  - [x] userland/mousetest.c — verified interactively under QEMU (monitor-injected mouse_move/mouse_button), decodes correct signed deltas and button press/release
 
 - [ ] Persistent storage (highest-priority gap toward being a "real" OS — everything today lives in an in-memory VFS rebuilt from initramfs.cpio at boot, so nothing a process writes survives reboot)
   - [ ] Block device abstraction (read_block/write_block, request queue)
@@ -103,7 +108,7 @@ A x86_64 kernel written in C, booted via the [Limine](https://codeberg.org/Limin
   - [ ] Syscall entry fuzzing (malformed/adversarial arguments — copy_from_user's exception table is exactly the kind of code this catches regressions in)
 
 - [ ] Compositor (GUI land — the goal before circling back to threads/SMP)
-  - [ ] Framebuffer mapped into userland
+  - [x] Framebuffer mapped into userland — SYS_fbmap maps the LFB's physical pages (not PMM-owned, so tagged PTE_NOPMM -- see vmm.h) into the caller out of the same MMAP_BASE bump region as SYS_mmap; regular munmap() tears it back down. userland/fbtest.c verified interactively under QEMU (color bars painted directly into the mapped buffer, repeated map/unmap/exit cycles left the PMM/COW machinery intact per malloctest/shmtest afterward)
   - [ ] Word-sized memcpy (currently byte-at-a-time, too slow for full-frame blits)
   - [ ] Write-combining framebuffer mapping (PAT/MTRR)
   - [ ] Compositor protocol over IPC (windows, damage rects, input events)
@@ -155,7 +160,7 @@ A x86_64 kernel written in C, booted via the [Limine](https://codeberg.org/Limin
 - [ ] string.c: strchr, strtok, strncmp, strcpy, strncpy, strcat (needed for shell parsing, e.g. `|`)
 - [ ] ctype.h: isspace, isdigit, isalpha (needed for shell tokenizing)
 - [x] unistd.c: dup, dup2, pipe() (wrappers for the SYS_pipe work)
-- [ ] stdlib.c: malloc, free, calloc — tracked under "Userland memory management" above
+- [x] stdlib.c: malloc, free, calloc — tracked under "Userland memory management" above
 - [ ] stdio.c: sprintf, snprintf (format into a buffer, needed for compositor protocol / error messages)
 - [ ] atoi
 - [x] errno — tracked under "Syscall hardening" above

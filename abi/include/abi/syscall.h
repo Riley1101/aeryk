@@ -28,4 +28,11 @@
 #define SYS_wait 61
 #define SYS_readdir 78
 
+// Not real Linux syscall numbers (Linux exposes mice via /dev/input and the
+// framebuffer via /dev/fb0 + mmap(2), not dedicated syscalls) -- picked
+// from unused slots below SYS_readdir so they don't collide with real ones
+// this ABI might adopt later.
+#define SYS_mouse_read 90
+#define SYS_fbmap 91
+
 #endif // !_ABI_SYSCALL_H

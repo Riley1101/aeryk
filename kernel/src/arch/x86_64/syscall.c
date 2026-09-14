@@ -4,9 +4,11 @@
 
 #include <arch/x86_64/fs/vfs.h>
 #include <arch/x86_64/drivers/keyboard.h>
+#include <arch/x86_64/drivers/mouse.h>
 #include <arch/x86_64/drivers/serial.h>
 
 #include <abi/errno.h>
+#include <abi/fb.h>
 #include <abi/mman.h>
 #include <pipe.h>
 #include <pmm.h>
@@ -686,6 +688,49 @@ void syscall_handler_c(struct syscall_frame *frame)
         frame->rax = newfd;
         break;
     }
+    case SYS_mouse_read:
+        frame->rax = mouse_read((mouse_packet_t *)frame->rdi, (int)frame->rsi);
+        break;
+
+    case SYS_fbmap:
+    {
+        // Maps the kernel's LFB into the caller's address space, out of the
+        // same mmap_next bump region SYS_mmap uses. Unlike SYS_mmap, the
+        // physical pages already exist (Limine's framebuffer, not
+        // pmm_alloc_page()), so every mapped PTE is tagged PTE_NOPMM --
+        // see vmm.h for why unmap/destroy/clone must never pmm_free_page()
+        // or pmm_page_ref_inc() an LFB frame.
+        FrameBuffer *fb = global_renderer->framebuffer;
+        uint64_t phys_base = (uint64_t)fb->base_address - hhdm_offset;
+        uint64_t size = fb->buffer_size;
+        uint64_t npages = (size + PAGE_SIZE - 1) / PAGE_SIZE;
+
+        uint64_t base = current_process->mmap_next;
+        uint64_t *pml4 = (uint64_t *)(current_process->cr3 + hhdm_offset);
+
+        uint64_t pte_flags = PTE_PRESENT | PTE_WRITABLE | PTE_USER | PTE_NX | PTE_NOPMM;
+        for (uint64_t i = 0; i < npages; i++)
+        {
+            vmm_map_page(pml4, base + i * PAGE_SIZE, phys_base + i * PAGE_SIZE, pte_flags);
+        }
+        current_process->mmap_next = base + npages * PAGE_SIZE;
+
+        fb_info_t info = {
+            .width = fb->width,
+            .height = fb->height,
+            .pitch = fb->pixels_per_scan_line * 4,
+            .bpp = 32,
+        };
+        if (copy_to_user((void *)frame->rdi, &info, sizeof(info)) != 0)
+        {
+            frame->rax = (uint64_t)-EFAULT;
+            break;
+        }
+
+        frame->rax = base;
+        break;
+    }
+
     case SYS_exit:
         if (current_process)
         {

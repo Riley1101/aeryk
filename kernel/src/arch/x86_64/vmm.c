@@ -168,7 +168,7 @@ void vmm_destroy_user_pagetable(uint64_t *pml4) {
             (uint64_t *)((pd[pd_i] & 0x000FFFFFFFFFF000) + hhdm_offset);
 
         for (size_t pt_i = 0; pt_i < 512; pt_i++) {
-          if (pt[pt_i] & PTE_PRESENT) {
+          if ((pt[pt_i] & PTE_PRESENT) && !(pt[pt_i] & PTE_NOPMM)) {
             pmm_free_page(
                 (void *)(pt[pt_i] & 0x000FFFFFFFFFF000));
           }
@@ -211,8 +211,11 @@ void vmm_unmap_page(uint64_t *pml4, uint64_t virtual_addr) {
   }
 
   uint64_t phys = pt[pt_entry] & 0x000FFFFFFFFFF000;
+  int nopmm = (pt[pt_entry] & PTE_NOPMM) != 0;
   pt[pt_entry] = 0;
-  pmm_free_page((void *)phys);
+  if (!nopmm) {
+    pmm_free_page((void *)phys);
+  }
   asm volatile("invlpg (%0)" : : "r"(virtual_addr) : "memory");
 }
 
@@ -257,12 +260,14 @@ uint64_t *vmm_clone_user_pagetable(uint64_t *src_pml4) {
           uint64_t flags = src_pt[pt_i] & 0xFFF0000000000FFF;
           uint64_t phys = src_pt[pt_i] & 0x000FFFFFFFFFF000;
 
-          if ((flags & PTE_WRITABLE) && !(flags & PTE_SHARED)) {
+          if ((flags & PTE_WRITABLE) && !(flags & (PTE_SHARED | PTE_NOPMM))) {
             flags = (flags & ~PTE_WRITABLE) | PTE_COW;
             src_pt[pt_i] = phys | flags;
           }
 
-          pmm_page_ref_inc((void *)phys);
+          if (!(flags & PTE_NOPMM)) {
+            pmm_page_ref_inc((void *)phys);
+          }
 
           uint64_t virtual_addr = ((uint64_t)pml4_i << 39) |
                                    ((uint64_t)pdpt_i << 30) |

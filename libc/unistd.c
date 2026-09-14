@@ -1,6 +1,8 @@
 #include <unistd.h>
 #include <sys/syscall.h>
 #include <sys/mman.h>
+#include <sys/mouse.h>
+#include <sys/fb.h>
 #include <abi/clone.h>
 #include <errno.h>
 #include <stdlib.h>
@@ -284,4 +286,29 @@ int munmap(void *addr, size_t length) {
                 : "0"(SYS_munmap), "D"(addr), "S"(length)
                 : "rcx", "r11", "memory");
   return (int)syscall_ret(ret);
+}
+
+/**
+ * @brief Reads decoded PS/2 mouse packets. See sys/mouse.h.
+ */
+int mouse_read(mouse_packet_t *buf, int max_packets) {
+  long ret;
+  asm volatile("syscall"
+                : "=a"(ret)
+                : "0"(SYS_mouse_read), "D"(buf), "S"(max_packets)
+                : "rcx", "r11", "memory");
+  return (int)syscall_ret(ret);
+}
+
+/**
+ * @brief Maps the kernel's framebuffer into this process. See sys/fb.h.
+ */
+void *fbmap(fb_info_t *info) {
+  long ret;
+  asm volatile("syscall"
+                : "=a"(ret)
+                : "0"(SYS_fbmap), "D"(info)
+                : "rcx", "r11", "memory");
+  ret = syscall_ret(ret);
+  return ret < 0 ? MAP_FAILED : (void *)ret;
 }

@@ -18,6 +18,18 @@
 // physical frame -- visible to (and writable by) every process mapping it,
 // parent and child alike -- forever, not just until the first write.
 #define PTE_SHARED (1ull << 10)
+// Marks a page whose physical frame is NOT owned by the PMM (e.g. the
+// framebuffer's LFB, mapped by fb_map() straight from the physical address
+// Limine handed the kernel, not from pmm_alloc_page()). The PMM's bitmap
+// and refcount arrays are sized off the highest USABLE memmap entry, and
+// an MMIO/LFB physical address commonly sits above that -- calling
+// pmm_free_page()/pmm_page_ref_inc() on it would index those arrays out of
+// bounds. Every path that would otherwise touch the PMM for a leaf frame
+// (vmm_unmap_page, vmm_destroy_user_pagetable, vmm_clone_user_pagetable)
+// must check this bit first and skip the PMM call -- the frame is only
+// ever unmapped, never freed or refcounted, and is shared as-is (like
+// PTE_SHARED) across fork rather than becoming a COW mapping.
+#define PTE_NOPMM (1ull << 11)
 
 /**
  * @brief Initializes the virtual memory manager by retrieving the kernel's PML4

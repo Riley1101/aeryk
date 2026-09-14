@@ -84,6 +84,12 @@ typedef enum {
   // PROCESS_BLOCKED_KBD above: must stay out of the generic PROCESS_BLOCKED
   // sweep so its wait_next/wait_prev linkage isn't fought over.
   PROCESS_BLOCKED_PIPE,
+  // Blocked in mouse_read(), already linked into mouse.c's own
+  // mouse_waitq and woken explicitly by on_irq12() via mlfq_enqueue().
+  // Same reasoning as PROCESS_BLOCKED_KBD above: must stay out of the
+  // generic PROCESS_BLOCKED sweep so its wait_next/wait_prev linkage isn't
+  // fought over.
+  PROCESS_BLOCKED_MOUSE,
   PROCESS_DEAD
 } process_state_t;
 
