@@ -63,10 +63,44 @@ A x86_64 kernel written in C, booted via the [Limine](https://codeberg.org/Limin
 
 - [ ] Userland memory management (prerequisite for compositor)
   - [x] Userland heap allocation (brk)
-  - [ ] Shared memory mapping between processes (mmap MAP_SHARED) — needed for compositor client/server shared buffers
+  - [x] Shared memory mapping between processes (mmap MAP_SHARED) — needed for compositor client/server shared buffers
   - [x] stdlib.c: malloc, free, calloc (libc wrappers over the above)
 
 - [ ] Mouse driver (PS/2) — lands before compositor windowing, not in parallel
+
+- [ ] Persistent storage (highest-priority gap toward being a "real" OS — everything today lives in an in-memory VFS rebuilt from initramfs.cpio at boot, so nothing a process writes survives reboot)
+  - [ ] Block device abstraction (read_block/write_block, request queue)
+  - [ ] One disk driver (AHCI or virtio-blk — virtio-blk is far less register/FIS boilerplate under QEMU)
+  - [ ] On-disk filesystem (FAT32 first for simplicity/tooling, ext2 later) sitting behind the existing vfs_node_t tree
+  - [ ] Wire VFS read/write/open through to the block-backed filesystem instead of the initramfs-only path
+  - [ ] Buffer cache (even a trivial one) so every read/write doesn't round-trip to the disk driver
+
+- [ ] Signals (SIGKILL/SIGSEGV/SIGCHLD at minimum) — wait() and the CPL-3 fault killer currently substitute for this, but a real shell needs job control, and userland needs a way to catch/ignore faults instead of just dying
+  - [ ] Signal delivery on a pending-signal check at syscall return / scheduler tick
+  - [ ] Default dispositions (terminate, ignore, core-dump-equivalent)
+  - [ ] sigaction/signal syscalls + libc wrappers
+  - [ ] SIGCHLD on child exit (today wait() is the only notification path)
+
+- [ ] Security / isolation hardening — currently ring 0/3 separation and copy_from_user/copy_to_user are the entire security model
+  - [ ] Per-segment W^X enforcement on ELF PT_LOAD mappings (verify elf.c/vmm.c aren't mapping any segment RWX)
+  - [ ] ASLR (randomize load base / mmap base / stack top)
+  - [ ] Guard pages around kernel and user stacks
+  - [ ] VFS permission bits (owner/mode) once a real filesystem exists to store them
+  - [ ] User/group model (even a minimal uid 0 vs. non-0 distinction)
+
+- [ ] Wall-clock time — currently timer-tick-only, no notion of real time
+  - [ ] RTC (CMOS or HPET) read at boot for wall-clock epoch
+  - [ ] gettimeofday/clock_gettime syscall + libc wrapper
+  - [ ] Filesystem timestamps (depends on the persistent-storage work above)
+
+- [ ] Networking (not previously scoped — decide whether it's in-scope before or after the compositor)
+  - [ ] NIC driver (virtio-net is the QEMU-friendly starting point, same rationale as virtio-blk above)
+  - [ ] Minimal stack (ARP/IPv4/UDP before TCP) or vendor lwIP
+  - [ ] Socket syscalls + libc wrappers
+
+- [ ] Reliability tooling (cheap now, same rationale as the CI smoke test above)
+  - [ ] ASan/UBSan (or a freestanding equivalent) build variant for the kernel, run in CI alongside the existing unit tests
+  - [ ] Syscall entry fuzzing (malformed/adversarial arguments — copy_from_user's exception table is exactly the kind of code this catches regressions in)
 
 - [ ] Compositor (GUI land — the goal before circling back to threads/SMP)
   - [ ] Framebuffer mapped into userland
@@ -127,6 +161,27 @@ A x86_64 kernel written in C, booted via the [Limine](https://codeberg.org/Limin
 - [x] errno — tracked under "Syscall hardening" above
 
 ## Build
+
+The slab allocator (`crates/kernel`) is written in Rust and cross-compiled
+against a freestanding `x86_64-aeryk` target (`crates/targets/x86_64-aeryk.json`),
+so a nightly Rust toolchain is required alongside the C toolchain. The
+`rust-lib` GNUmakefile target builds it with `cargo +nightly build
+-Zbuild-std=core -Zjson-target-spec` and stages the resulting
+`libaeryk_kernel.a` for the linker; `make`/`make run`/`make clean` drive this
+automatically, no separate step needed.
+
+
+WHY? 
+
+> BECAUSE IT's FUN!!!!!!!
+
+```sh
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+rustup toolchain install nightly --component rust-src
+```
+
+(`rust-toolchain.toml` pins the nightly channel and `rust-src` component, so
+`rustup` will pick these up automatically once installed.)
 
 **macOS**
 

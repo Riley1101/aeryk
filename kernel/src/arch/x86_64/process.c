@@ -479,6 +479,7 @@ process_t *create_user_process(const char *path, int argc, char *const argv[])
     proc->user_stack_top = initial_rsp;
     proc->brk_start = brk_start;
     proc->brk = brk_start;
+    proc->mmap_next = MMAP_BASE;
     proc->cr3 = (uint64_t)pml4 - hhdm_offset;
     proc->parent = current_process;
 
@@ -529,6 +530,7 @@ int exec_process(process_t *proc, const char *path, int argc, char *const argv[]
     proc->user_stack_top = new_user_stack_top;
     proc->brk_start = new_brk_start;
     proc->brk = new_brk_start;
+    proc->mmap_next = MMAP_BASE;
 
     asm volatile("mov %0, %%cr3" : : "r"(proc->cr3) : "memory");
 
@@ -631,6 +633,7 @@ process_t *clone_process(process_t *parent, const trapframe_t *regs,
     // clone_process() in process.h.
     child->brk_start = parent->brk_start;
     child->brk = parent->brk;
+    child->mmap_next = parent->mmap_next;
     child->cr3 = (uint64_t)child_pml4 - hhdm_offset;
     child->vm_refcount = vm_refcount;
     if (vm_refcount)

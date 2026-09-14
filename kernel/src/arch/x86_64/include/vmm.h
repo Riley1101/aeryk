@@ -12,6 +12,12 @@
 // child's mapping, so a write faults and the page-fault handler can decide
 // whether to copy or just reclaim sole ownership.
 #define PTE_COW (1ull << 9)
+// Marks a page mapped via mmap(MAP_SHARED): unlike an ordinary writable
+// page, vmm_clone_user_pagetable() must NOT turn this into a COW mapping
+// across fork(), since a MAP_SHARED region is required to stay one shared
+// physical frame -- visible to (and writable by) every process mapping it,
+// parent and child alike -- forever, not just until the first write.
+#define PTE_SHARED (1ull << 10)
 
 /**
  * @brief Initializes the virtual memory manager by retrieving the kernel's PML4
@@ -71,7 +77,10 @@ void vmm_destroy_user_pagetable(uint64_t *pml4);
  * is bumped, so the first write by either side takes a page fault that
  * gives it a private copy (see the #PF handler in idt.c). Already
  * read-only pages are shared without the COW marker since neither side can
- * write them. The kernel half (entries 256-511) is shared with the running
+ * write them. A page marked PTE_SHARED (mmap MAP_SHARED) is the third case:
+ * it's shared with its writable bit left intact and no COW marker added, so
+ * parent and child keep writing straight through to the same physical frame
+ * instead of forking off private copies. The kernel half (entries 256-511) is shared with the running
  * kernel, same as vmm_new_user_pagetable(). Flushes the TLB before
  * returning, since `src_pml4` is normally the currently-active address
  * space and its entries were just downgraded to read-only in place. Used
@@ -80,6 +89,21 @@ void vmm_destroy_user_pagetable(uint64_t *pml4);
  * @return The new PML4's HHDM virtual address, or NULL on allocation failure.
  */
 uint64_t *vmm_clone_user_pagetable(uint64_t *src_pml4);
+
+/**
+ * @brief Unmaps a single page at `virtual_addr` in `pml4`, if present:
+ * drops the physical frame's refcount (freeing it once no other mapping
+ * holds it, same as any other pmm_free_page() call) and clears the leaf
+ * page-table entry. A no-op at whichever level the walk finds the page
+ * already unmapped -- safe to call on an address that was never mapped, or
+ * only partially mapped. Does not free now-empty intermediate PDPT/PD/PT
+ * pages (unlike vmm_destroy_user_pagetable(), this is for unmapping one
+ * region out of a still-live address space, e.g. SYS_munmap). Flushes the
+ * TLB for `virtual_addr`.
+ * @param pml4 Pointer to the PML4 table.
+ * @param virtual_addr The virtual address of the page to unmap.
+ */
+void vmm_unmap_page(uint64_t *pml4, uint64_t virtual_addr);
 
 /**
  * @brief Handles a copy-on-write page fault for `fault_vaddr` in `pml4`.

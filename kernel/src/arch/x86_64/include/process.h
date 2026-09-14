@@ -7,6 +7,14 @@
 #define MAX_FDS 32
 
 /**
+ * @brief Base of the region SYS_mmap hands out addresses from. Sits well
+ * below USER_STACK_TOP (0x0000700000000000, private to process.c) and well
+ * above where an ELF image's segments/brk heap live, so none of the three
+ * regions can grow into each other.
+ */
+#define MMAP_BASE 0x0000600000000000ULL
+
+/**
  * @brief Maximum number of argv entries accepted by create_user_process(),
  * exec_process(), and their SYS_execve syscall handler. Shared
  * so the kernel-side copy of a user argv[] array and the user-stack argv
@@ -238,6 +246,15 @@ typedef struct process {
    * malloc()/sbrk() in userland are built on top of this.
    */
   uint64_t brk;
+
+  /**
+   * @brief Bump allocator for SYS_mmap: the next free virtual address in
+   * the mmap region (starting at MMAP_BASE) that a new mapping can be
+   * placed at. Only ever grows -- SYS_munmap unmaps and frees the pages in
+   * its range but, like brk, doesn't reclaim address space -- so a
+   * mmap()/munmap() pair never hands back the same range twice.
+   */
+  uint64_t mmap_next;
 
   file_descriptor_t fd_table[MAX_FDS];
 

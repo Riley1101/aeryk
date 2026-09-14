@@ -184,6 +184,39 @@ void vmm_destroy_user_pagetable(uint64_t *pml4) {
 }
 
 /**
+ * @brief Unmaps a single page. See vmm.h for the full behavior.
+ */
+void vmm_unmap_page(uint64_t *pml4, uint64_t virtual_addr) {
+  size_t pml4_entry = (virtual_addr >> 39) & 0x1FF;
+  size_t pdpt_entry = (virtual_addr >> 30) & 0x1FF;
+  size_t pd_entry = (virtual_addr >> 21) & 0x1FF;
+  size_t pt_entry = (virtual_addr >> 12) & 0x1FF;
+
+  if (!(pml4[pml4_entry] & PTE_PRESENT)) {
+    return;
+  }
+  uint64_t *pdpt =
+      (uint64_t *)((pml4[pml4_entry] & 0x000FFFFFFFFFF000) + hhdm_offset);
+  if (!(pdpt[pdpt_entry] & PTE_PRESENT)) {
+    return;
+  }
+  uint64_t *pd =
+      (uint64_t *)((pdpt[pdpt_entry] & 0x000FFFFFFFFFF000) + hhdm_offset);
+  if (!(pd[pd_entry] & PTE_PRESENT)) {
+    return;
+  }
+  uint64_t *pt = (uint64_t *)((pd[pd_entry] & 0x000FFFFFFFFFF000) + hhdm_offset);
+  if (!(pt[pt_entry] & PTE_PRESENT)) {
+    return;
+  }
+
+  uint64_t phys = pt[pt_entry] & 0x000FFFFFFFFFF000;
+  pt[pt_entry] = 0;
+  pmm_free_page((void *)phys);
+  asm volatile("invlpg (%0)" : : "r"(virtual_addr) : "memory");
+}
+
+/**
  * @brief Copy-on-write clones the user half (entries 0-255) of `src_pml4`
  * into a freshly allocated pagetable. See vmm.h for the full behavior.
  * Returns NULL (having freed any partial work) if any allocation along the
@@ -224,7 +257,7 @@ uint64_t *vmm_clone_user_pagetable(uint64_t *src_pml4) {
           uint64_t flags = src_pt[pt_i] & 0xFFF0000000000FFF;
           uint64_t phys = src_pt[pt_i] & 0x000FFFFFFFFFF000;
 
-          if (flags & PTE_WRITABLE) {
+          if ((flags & PTE_WRITABLE) && !(flags & PTE_SHARED)) {
             flags = (flags & ~PTE_WRITABLE) | PTE_COW;
             src_pt[pt_i] = phys | flags;
           }

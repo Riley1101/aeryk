@@ -1,5 +1,6 @@
 #include <unistd.h>
 #include <sys/syscall.h>
+#include <sys/mman.h>
 #include <abi/clone.h>
 #include <errno.h>
 #include <stdlib.h>
@@ -253,4 +254,34 @@ ssize_t listdir(const char *path, char *buf, size_t size) {
                 : "0"(SYS_readdir), "D"(path), "S"(buf), "d"(size)
                 : "rcx", "r11", "memory");
   return syscall_ret(ret);
+}
+
+/**
+ * @brief Maps a new anonymous region into this process's address space.
+ * See sys/mman.h.
+ */
+void *mmap(void *addr, size_t length, int prot, int flags, int fd, int64_t offset) {
+  (void)addr;
+  long ret;
+  register long r10 asm("r10") = flags;
+  register long r8 asm("r8") = fd;
+  register long r9 asm("r9") = offset;
+  asm volatile("syscall"
+                : "=a"(ret)
+                : "0"(SYS_mmap), "D"(0), "S"(length), "d"(prot), "r"(r10), "r"(r8), "r"(r9)
+                : "rcx", "r11", "memory");
+  ret = syscall_ret(ret);
+  return ret < 0 ? MAP_FAILED : (void *)ret;
+}
+
+/**
+ * @brief Unmaps a previously mmap()'d region. See sys/mman.h.
+ */
+int munmap(void *addr, size_t length) {
+  long ret;
+  asm volatile("syscall"
+                : "=a"(ret)
+                : "0"(SYS_munmap), "D"(addr), "S"(length)
+                : "rcx", "r11", "memory");
+  return (int)syscall_ret(ret);
 }

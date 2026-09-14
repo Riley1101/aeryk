@@ -7,6 +7,7 @@
 #include <arch/x86_64/drivers/serial.h>
 
 #include <abi/errno.h>
+#include <abi/mman.h>
 #include <pipe.h>
 #include <pmm.h>
 #include <process.h>
@@ -395,6 +396,91 @@ void syscall_handler_c(struct syscall_frame *frame)
         // it sees a non-zero result, so a negative result here is always
         // that ECHILD case, never some other error.
         frame->rax = (result < 0) ? (uint64_t)-ECHILD : (uint64_t)(int64_t)result;
+        break;
+    }
+    case SYS_mmap:
+    {
+        // Register order matches the raw Linux mmap(2) syscall: addr, length,
+        // prot, flags, fd, offset -- rdi, rsi, rdx, r10, r8, r9. `addr` is
+        // ignored (this always picks the placement itself, like passing
+        // addr=NULL on Linux); only anonymous mappings are supported, since
+        // there's no page-cache to back a file-backed mapping with yet.
+        uint64_t length = frame->rsi;
+        int prot = (int)frame->rdx;
+        int flags = (int)frame->r10;
+        int64_t fd = (int64_t)frame->r8;
+
+        if (length == 0 || fd != -1 || !(flags & MAP_ANONYMOUS) ||
+            !(flags & (MAP_SHARED | MAP_PRIVATE)))
+        {
+            frame->rax = (uint64_t)-EINVAL;
+            break;
+        }
+
+        uint64_t npages = (length + PAGE_SIZE - 1) / PAGE_SIZE;
+        uint64_t base = current_process->mmap_next;
+        uint64_t *pml4 = (uint64_t *)(current_process->cr3 + hhdm_offset);
+
+        uint64_t pte_flags = PTE_PRESENT | PTE_USER;
+        if (prot & PROT_WRITE)
+        {
+            pte_flags |= PTE_WRITABLE;
+        }
+        if (!(prot & PROT_EXEC))
+        {
+            pte_flags |= PTE_NX;
+        }
+        if (flags & MAP_SHARED)
+        {
+            // Marks these pages so a later fork() shares the live frame
+            // (still writable, still one physical page) with the child
+            // instead of falling back to the usual COW-on-write split --
+            // see PTE_SHARED in vmm.h. MAP_PRIVATE anonymous pages get no
+            // such marker: an ordinary writable page, private to this
+            // process, COW-split like any other on fork().
+            pte_flags |= PTE_SHARED;
+        }
+
+        uint64_t mapped = 0;
+        for (; mapped < npages; mapped++)
+        {
+            void *phys = pmm_alloc_page();
+            if (!phys)
+            {
+                break;
+            }
+            memset((void *)((uint64_t)phys + hhdm_offset), 0, PAGE_SIZE);
+            vmm_map_page(pml4, base + mapped * PAGE_SIZE, (uint64_t)phys, pte_flags);
+        }
+
+        if (mapped < npages)
+        {
+            frame->rax = (uint64_t)-ENOMEM;
+            break;
+        }
+
+        current_process->mmap_next = base + npages * PAGE_SIZE;
+        frame->rax = base;
+        break;
+    }
+    case SYS_munmap:
+    {
+        uint64_t addr = frame->rdi;
+        uint64_t length = frame->rsi;
+
+        if (length == 0 || addr % PAGE_SIZE != 0 || addr < MMAP_BASE)
+        {
+            frame->rax = (uint64_t)-EINVAL;
+            break;
+        }
+
+        uint64_t npages = (length + PAGE_SIZE - 1) / PAGE_SIZE;
+        uint64_t *pml4 = (uint64_t *)(current_process->cr3 + hhdm_offset);
+        for (uint64_t i = 0; i < npages; i++)
+        {
+            vmm_unmap_page(pml4, addr + i * PAGE_SIZE);
+        }
+        frame->rax = 0;
         break;
     }
     case SYS_brk:
