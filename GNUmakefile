@@ -173,14 +173,16 @@ kernel/.deps-obtained:
 # name in USERLAND_PROGS -- no other Makefile changes needed.
 override USERLAND_PROGS := init cat sh ls tree forktest exectest crashtest usercopytest pipetest sprintftest malloctest clonetest shmtest mousetest fbtest clear
 
-# Rust userland programs: userland/<name>.elf built from a staticlib in
-# crates/user (one crate = one program for now, see crates/user/Cargo.toml)
-# instead of userland/<name>.c, linked against the same crt0.o/libc.a as
+# Rust userland programs: userland/<name>.elf built from a staticlib in the
+# crates/userland Cargo workspace (crates/userland/rusthello,
+# crates/userland/compositor, crates/userland/testclient -- one crate = one
+# program, see crates/userland/Cargo.toml) instead of userland/<name>.c,
+# linked against the same crt0.o/libc.a as
 # every C program. To add another, add its crate name here and give it an
 # explicit userland/<name>.elf rule below (mirroring rusthello's), since
 # each Rust program is its own crate/staticlib, unlike the single shared
 # %.c.o pattern rule the C programs use.
-override USERLAND_RUST_PROGS := rusthello
+override USERLAND_RUST_PROGS := rusthello compositor testclient
 
 override USERLAND_LIBC_SRCS := \
     libc/errno.c \
@@ -220,26 +222,48 @@ obj-userland/%.c.o: userland/%.c
 	mkdir -p $(dir $@)
 	$(USER_CC) $(USERLAND_CFLAGS) -c $< -o $@
 
-# Rust userland bridge (crates/user), same shape as the kernel's rust-lib
-# rule: built against a freestanding target spec whose codegen flags
-# (no SSE/MMX/x87, no redzone, static/non-PIE) match USERLAND_CFLAGS above,
-# so it links straight into the same crt0.o/libc.a every C program uses.
-override RUST_USER_DIR := crates/user
-override RUST_USER_TARGET := crates/targets/x86_64-aeryk-user.json
-override RUST_USER_PROFILE := release
-override RUST_USER_LIB := $(RUST_USER_DIR)/target/x86_64-aeryk-user/$(RUST_USER_PROFILE)/libaeryk_user_rusthello.a
-override RUST_USER_STAGED_LIB := obj-userland/libaeryk_user_rusthello.a
+# Rust userland bridge: crates/userland/{rusthello,compositor,testclient}
+# (plus their shared crates/userland/{user-rt,compositor-protocol}
+# dependencies) all live in one Cargo workspace (crates/userland/Cargo.toml)
+# -- one shared target dir/Cargo.lock and one `cargo build` invocation
+# instead of three separate ones, now that there's enough of them for
+# shared dependencies to be worth it. crates/kernel sits outside this
+# workspace (a sibling of crates/userland, not nested under it -- see
+# crates/userland/Cargo.toml's comment) since it builds against a
+# different target with its own sys.rs bridge into the kernel's own C
+# runtime, not libc.a. Built against a freestanding target spec whose
+# codegen flags (no SSE/MMX/x87, no redzone, static/non-PIE) match
+# USERLAND_CFLAGS above, so each staticlib links straight into the same
+# crt0.o/libc.a every C program uses -- crt0.asm's `call main` just needs
+# a Rust-exported `main` symbol, no crt0/linker changes needed. To add
+# another Rust program: give it its own crate (rusthello's Cargo.toml is
+# the minimal shape to copy), add it to crates/userland/Cargo.toml's
+# `members`, add its package name to RUST_USERLAND_PKGS below, and give it
+# an explicit userland/<name>.elf rule mirroring rusthello's.
+override RUST_USERLAND_DIR := crates/userland
+override RUST_USERLAND_PROFILE := release
+override RUST_USERLAND_TARGET_DIR := $(RUST_USERLAND_DIR)/target/x86_64-aeryk-user/$(RUST_USERLAND_PROFILE)
+override RUST_USERLAND_PKGS := aeryk-rusthello aeryk-compositor aeryk-testclient
 
-.PHONY: rust-user-lib
-rust-user-lib:
-	cd $(RUST_USER_DIR) && cargo +nightly build -Zbuild-std=core -Zjson-target-spec \
-		--target ../targets/x86_64-aeryk-user.json --$(RUST_USER_PROFILE)
-	mkdir -p "$(dir $(RUST_USER_STAGED_LIB))"
-	cp $(RUST_USER_LIB) $(RUST_USER_STAGED_LIB)
+.PHONY: rust-userland-libs
+rust-userland-libs:
+	cd $(RUST_USERLAND_DIR) && cargo +nightly build -Zbuild-std=core -Zjson-target-spec \
+		--target ../targets/x86_64-aeryk-user.json --$(RUST_USERLAND_PROFILE) \
+		$(addprefix -p ,$(RUST_USERLAND_PKGS))
 
-userland/rusthello.elf: rust-user-lib userland/linker.lds obj-userland/crt0.o obj-userland/libc.a
+userland/rusthello.elf: rust-userland-libs userland/linker.lds obj-userland/crt0.o obj-userland/libc.a
 	$(USER_LD) -nostdlib -static -m elf_x86_64 -T userland/linker.lds \
-		obj-userland/crt0.o $(RUST_USER_STAGED_LIB) obj-userland/libc.a -o $@
+		obj-userland/crt0.o $(RUST_USERLAND_TARGET_DIR)/libaeryk_rusthello.a obj-userland/libc.a -o $@
+
+userland/compositor.elf: rust-userland-libs userland/linker.lds obj-userland/crt0.o obj-userland/libc.a
+	$(USER_LD) -nostdlib -static -m elf_x86_64 -T userland/linker.lds \
+		obj-userland/crt0.o $(RUST_USERLAND_TARGET_DIR)/libaeryk_compositor.a obj-userland/libc.a -o $@
+
+# Test client -- spawned by the compositor, see
+# crates/userland/compositor-protocol/src/lib.rs. Same shape as rusthello/compositor.
+userland/testclient.elf: rust-userland-libs userland/linker.lds obj-userland/crt0.o obj-userland/libc.a
+	$(USER_LD) -nostdlib -static -m elf_x86_64 -T userland/linker.lds \
+		obj-userland/crt0.o $(RUST_USERLAND_TARGET_DIR)/libaeryk_testclient.a obj-userland/libc.a -o $@
 
 userland/%.elf: obj-userland/%.c.o userland/linker.lds obj-userland/crt0.o obj-userland/libc.a
 	$(USER_LD) -nostdlib -static -m elf_x86_64 -T userland/linker.lds \
@@ -371,7 +395,7 @@ docs-clean:
 distclean:
 	$(MAKE) -C kernel distclean
 	rm -rf iso_root *.iso *.hdd limine edk2-ovmf unity tests/bin docs
-	cd crates/user && cargo clean
+	cd crates/userland && cargo clean
 
 .PHONY: debug
 debug: edk2-ovmf $(IMAGE_NAME).iso

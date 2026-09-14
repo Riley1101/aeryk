@@ -1,0 +1,11 @@
+[package]
+name = "aeryk-compositor"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+aeryk-user-rt = { path = "../user-rt" }
+aeryk-compositor-protocol = { path = "../compositor-protocol" }

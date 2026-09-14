@@ -6,23 +6,23 @@
 //! crt0.asm already just does `call main`, so a Rust-exported `main`
 //! slots in with no changes to the boot path or linker script. Mirrors
 //! crates/kernel's split: Rust owns the logic, C owns the syscall ABI and
-//! the already-tested runtime (see sys.rs).
+//! the already-tested runtime (see crates/userland/user-rt).
 //!
 //! Today this just proves the toolchain end to end (build, link, boot,
-//! run) with a trivial program; real UI code (compositor, layout engine,
-//! protocol) is meant to replace `main` here once the pipeline is proven.
+//! run) with a trivial program; compositor/testclient are the real UI
+//! code that followed once this pipeline was proven.
 
-mod sys;
+use aeryk_user_rt::sys::{exit, puts};
 
 #[panic_handler]
 fn panic(_info: &core::panic::PanicInfo) -> ! {
-    unsafe { sys::exit(101) }
+    unsafe { exit(101) }
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn main(_argc: i32, _argv: *const *const u8) -> i32 {
     unsafe {
-        sys::puts(b"hello from rust\0".as_ptr());
-        sys::exit(0);
+        puts(b"hello from rust\0".as_ptr());
+        exit(0);
     }
 }

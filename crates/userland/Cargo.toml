@@ -1,0 +1,29 @@
+[workspace]
+resolver = "2"
+members = [
+    "user-rt",
+    "compositor-protocol",
+    "rusthello",
+    "compositor",
+    "testclient",
+]
+
+# crates/kernel lives outside this workspace entirely (a sibling of
+# userland/, not nested under it), so Cargo's upward workspace search from
+# there never finds this file -- it builds standalone, same as before this
+# workspace existed. That's deliberate: it builds against a different
+# target (../targets/x86_64-aeryk.json, code-model=kernel, linked into
+# bin-x86_64/kernel via kernel/GNUmakefile) with its own sys.rs bridge into
+# the kernel's own C runtime, not libc.a -- nothing in it is shared with
+# the userland crates here, which all build against
+# ../targets/x86_64-aeryk-user.json (code-model=small) and link into
+# userland/<name>.elf via crt0.o + libc.a instead. It keeps its own
+# Cargo.lock/target dir, built by a separate `cargo build` in
+# kernel/GNUmakefile's `rust-lib` rule.
+
+[profile.release]
+panic = "abort"
+lto = true
+
+[profile.dev]
+panic = "abort"

@@ -181,6 +181,24 @@ static const char *exception_messages[32] = {
 };
 
 /**
+ * @brief Prints a 64-bit value to the serial console as "0x" + 16 hex
+ * digits. Used only for fatal-exception diagnostics below -- a bare
+ * "EXCEPTION: Page Fault" with no faulting address or instruction pointer
+ * is nearly useless for tracking down which kernel-mode code faulted.
+ */
+static void serial_print_hex(uint64_t value) {
+    char buf[19];
+    buf[0] = '0';
+    buf[1] = 'x';
+    for (int i = 0; i < 16; i++) {
+        uint8_t nibble = (value >> ((15 - i) * 4)) & 0xF;
+        buf[2 + i] = (char)(nibble < 10 ? ('0' + nibble) : ('a' + nibble - 10));
+    }
+    buf[18] = '\0';
+    serial_print(buf);
+}
+
+/**
  * @brief Handles CPU exceptions and IRQs.
  *
  * This function is called by the interrupt service routines (ISRs) and
@@ -252,6 +270,25 @@ void isr_handler(struct interrupt_frame *frame)
         serial_print("\n KERNEL PANIC **\n");
         serial_print("EXCEPTION:");
         serial_print(exception_messages[frame->int_no]);
+        serial_print("\nRIP: ");
+        serial_print_hex(frame->rip);
+        serial_print("  CS: ");
+        serial_print_hex(frame->cs);
+        serial_print("\nerr_code: ");
+        serial_print_hex(frame->err_code);
+        if (frame->int_no == 14) {
+            uint64_t cr2;
+            asm volatile("mov %%cr2, %0" : "=r"(cr2));
+            serial_print("\nCR2 (fault addr): ");
+            serial_print_hex(cr2);
+        }
+        serial_print("\ncurrent_process: ");
+        serial_print_hex((uint64_t)current_process);
+        if (current_process) {
+            serial_print("  pid: ");
+            serial_print_hex(current_process->pid);
+        }
+        serial_print("\n");
 
 // TODO! Cross compile these tests to avoid arch dependent flags
 #ifdef __x86_64__

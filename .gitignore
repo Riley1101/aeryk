@@ -12,4 +12,4 @@ initramfs.cpio
 /userland/*.elf
 /initramfs_root/bin
 /crates/kernel/target
-/crates/user/target
+/crates/userland/target
