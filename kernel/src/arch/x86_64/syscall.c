@@ -43,6 +43,21 @@ struct syscall_frame
 
 #define MAX_ARG_LEN 128
 
+// SYS_fbmap's exclusivity lock: only one process may hold the real
+// framebuffer mapped at a time (the eventual compositor), so a second
+// process trying to fbmap() gets -EBUSY instead of two processes racing
+// writes to the same screen. `fb_has_owner` distinguishes "no owner yet"
+// from a valid pid 0 (the idle/init process), since pid 0 is otherwise a
+// legitimate value.
+static uint64_t fb_owner_pid = 0;
+static int fb_has_owner = 0;
+
+void fbmap_release_owner(uint64_t pid) {
+    if (fb_has_owner && fb_owner_pid == pid) {
+        fb_has_owner = 0;
+    }
+}
+
 /**
  * @brief Copies a NULL-terminated argv[] array from user space into
  * fixed-size kernel buffers, for SYS_execve. Each user pointer
@@ -706,6 +721,14 @@ void syscall_handler_c(struct syscall_frame *frame)
         // for; the kernel's own HHDM mapping of the same physical range
         // (used by tty.c) is untouched here, since Limine set that one up
         // before init_vmm() ever ran.
+        if (fb_has_owner && fb_owner_pid != current_process->pid)
+        {
+            frame->rax = (uint64_t)-EBUSY;
+            break;
+        }
+        fb_owner_pid = current_process->pid;
+        fb_has_owner = 1;
+
         FrameBuffer *fb = global_renderer->framebuffer;
         uint64_t phys_base = (uint64_t)fb->base_address - hhdm_offset;
         uint64_t size = fb->buffer_size;
@@ -750,6 +773,7 @@ void syscall_handler_c(struct syscall_frame *frame)
         if (current_process)
         {
             process_release_fds(current_process);
+            fbmap_release_owner(current_process->pid);
             current_process->exit_code = (int)frame->rdi;
             current_process->state = PROCESS_DEAD;
             schedule();

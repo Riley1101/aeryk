@@ -4,6 +4,7 @@
 #include <sys/fb.h>
 #include <sys/mman.h>
 #include <sys/tsc.h>
+#include <unistd.h>
 
 // Background color to restore before exiting -- matches BG (tty.h) so the
 // screen looks untouched once the shell prompt redraws over it.
@@ -36,6 +37,25 @@ void main(void) {
     }
   }
   printf("fbtest: painted color bars\n");
+
+  // Exclusivity check: while this process still holds the fbmap, a second
+  // process trying to fbmap() should get -EBUSY, not a second mapping of
+  // the same screen. Fork a short-lived child to prove that for real
+  // rather than just by code review.
+  int child_pid = fork();
+  if (child_pid == 0) {
+    fb_info_t child_info;
+    void *child_fb = fbmap(&child_info);
+    printf("fbtest: child fbmap() while parent holds it: %s\n",
+           child_fb == MAP_FAILED ? "rejected (EBUSY) as expected"
+                                   : "UNEXPECTEDLY SUCCEEDED");
+    exit(child_fb == MAP_FAILED ? 0 : 1);
+  }
+  int child_status = 0;
+  wait(child_pid, &child_status);
+  if (child_status != 0) {
+    printf("fbtest: exclusivity check FAILED\n");
+  }
 
   // Blit throughput benchmark: repeatedly memcpy a full frame from a
   // staging buffer into the mapped (write-combining) framebuffer, timed

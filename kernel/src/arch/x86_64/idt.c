@@ -4,6 +4,7 @@
 #include <process.h>
 #include <stdint.h>
 #include <string.h>
+#include <syscall.h>
 #include <usercopy.h>
 #include <utils.h>
 #include <vmm.h>
@@ -237,6 +238,7 @@ void isr_handler(struct interrupt_frame *frame)
             serial_print("\n");
 
             process_release_fds(current_process);
+            fbmap_release_owner(current_process->pid);
             current_process->exit_code = -1;
             current_process->state = PROCESS_DEAD;
 
