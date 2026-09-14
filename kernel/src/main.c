@@ -278,8 +278,11 @@ void kmain(void) {
   init_display();
   print("[-] Display initialized.\n");
 
-  init_serial();
-  print("[-] Serial initialized.\n");
+  if (init_serial() == 0) {
+    print("[-] Serial initialized.\n");
+  } else {
+    print("[-] Serial self-test FAILED, serial output disabled.\n");
+  }
 
   init_pmm();
   print("[0] PMM Initialized\n");

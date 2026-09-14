@@ -61,6 +61,12 @@ void init_renderer(Renderer *renderer, FrameBuffer *framebuffer,
  * @return void
  */
 static void print_char_locked(char chr) {
+  // Mirror everything the framebuffer console prints to serial too, so the
+  // kernel log is visible over -serial stdio when running headless (no
+  // framebuffer to read), e.g. under CI. No-ops until init_serial() has
+  // passed its self-test.
+  serial_putchar(chr);
+
   switch (chr) {
   case '\n':
     global_renderer->cursor_position.x = 0;
@@ -88,11 +94,14 @@ static void print_char_locked(char chr) {
     break;
   }
 
-  if (global_renderer->cursor_position.x + 8 > global_renderer->framebuffer->width) {
+  unsigned int usable_width = (global_renderer->framebuffer->width / 8) * 8;
+  unsigned int usable_height = (global_renderer->framebuffer->height / 16) * 16;
+
+  if (global_renderer->cursor_position.x + 8 > usable_width) {
     global_renderer->cursor_position.x = 0;
     global_renderer->cursor_position.y += 16;
   }
-  if (global_renderer->cursor_position.y + 16 > global_renderer->framebuffer->height) {
+  if (global_renderer->cursor_position.y + 16 > usable_height) {
     scroll_up(global_renderer);
     global_renderer->cursor_position.y -= 16;
   }

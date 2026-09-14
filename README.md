@@ -33,7 +33,7 @@ A x86_64 kernel written in C, booted via the [Limine](https://codeberg.org/Limin
 - [x] Keyboard driver
 - [x] Heap allocator
 - [x] Scheduler / processes MLFQ
-- [x] Serial driver (not complete one, just for debugging instructions to GDB)
+- [x] Serial driver (loopback self-test verified, mirrors the full boot/console log — used as the CI smoke-test output channel)
 - [x] Syscall interface
   - [x] sys_write and sys_exit
   - [x] sys_open, sys_read, sys_close
@@ -57,9 +57,9 @@ A x86_64 kernel written in C, booted via the [Limine](https://codeberg.org/Limin
   - [x] errno (kernel syscalls return -errno on failure; libc wrappers translate that into the `errno` global + a -1 return)
   - [x] clone (CLONE_VM only — see above)
 
-- [ ] CI / test infra (cheap now, expensive to retrofit after SMP/compositor land)
-  - [ ] Finish serial driver (currently debug-only, "not complete") — needed as the output channel for a CI smoke test
-  - [ ] QEMU headless boot + serial-output assert in CI (catches boot hangs / triple faults / taskswitch-class regressions that host-side unit tests can't see)
+- [x] CI / test infra (cheap now, expensive to retrofit after SMP/compositor land)
+  - [x] Finish serial driver (currently debug-only, "not complete") — needed as the output channel for a CI smoke test
+  - [x] QEMU headless boot + serial-output assert in CI (catches boot hangs / triple faults / taskswitch-class regressions that host-side unit tests can't see)
 
 - [ ] Userland memory management (prerequisite for compositor)
   - [x] Userland heap allocation (brk)

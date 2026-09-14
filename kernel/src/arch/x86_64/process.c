@@ -864,8 +864,20 @@ int wait_reap_child(process_t *parent, int64_t pid, int *status_out)
  * yet, so a blocked process is simply given another turn every time
  * schedule() runs (e.g. on the next timer tick, or right after a child
  * exits) and it decides for itself whether to block again.
+ *
+ * @param self The process currently calling into schedule() (its `prev`),
+ * excluded from this sweep even if it just set its own state to
+ * PROCESS_BLOCKED moments ago. Waking it back up within the very same
+ * schedule() call it used to block itself defeats the block: if nothing
+ * else happens to be ready at that instant, mlfq_pick_next() hands the
+ * process right back to itself, schedule()'s prev == next check skips the
+ * switch, and the caller's retry loop (e.g. SYS_wait) spins back into
+ * re-checking a condition that had no chance to change yet -- a busy-loop
+ * that starves out the very child it's waiting on, since the CPU never
+ * actually leaves the parent. It only needs a real turn on some *later*
+ * schedule() call (the next timer tick, or another process's event).
  */
-static void wake_blocked_processes(void)
+static void wake_blocked_processes(process_t *self)
 {
     if (!process_queue)
     {
@@ -886,7 +898,7 @@ static void wake_blocked_processes(void)
         process_t *cand = node;
         node = node->next;
 
-        if (cand->state == PROCESS_BLOCKED)
+        if (cand != self && cand->state == PROCESS_BLOCKED)
         {
             mlfq_enqueue(cand);
         }
@@ -906,9 +918,10 @@ void schedule()
         return;
 
     reap_zombies();
-    wake_blocked_processes();
 
     process_t *prev = current_process;
+
+    wake_blocked_processes(prev);
 
     if (prev->state == PROCESS_RUNNING && prev != idle_process)
     {

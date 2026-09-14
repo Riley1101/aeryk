@@ -4,8 +4,15 @@
 /**
  * @brief Initializes the serial port for communication.
  * Configures the serial port settings and prepares it for data transmission.
+ * @return 0 on success, -1 if the loopback self-test failed.
  */
-void init_serial();
+int init_serial();
+
+/**
+ * @brief Reports whether init_serial() completed its self-test successfully.
+ * @return Non-zero if the port is initialized and safe to write to.
+ */
+int serial_is_ready(void);
 
 /**
  * @brief Sends a single character over the serial port.

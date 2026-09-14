@@ -601,8 +601,6 @@ void syscall_handler_c(struct syscall_frame *frame)
         break;
     }
     case SYS_exit:
-        print("\n[Syscall] Process exited.\n");
-
         if (current_process)
         {
             process_release_fds(current_process);
