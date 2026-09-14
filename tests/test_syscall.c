@@ -1,4 +1,5 @@
 #include "unity.h"
+#include <abi/errno.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -65,7 +66,7 @@ void test_sys_read_from_non_stdin_returns_error(void)
     syscall_handler_c(&frame);
 
     TEST_ASSERT_EQUAL_INT(0, keyboard_read_call_count);
-    TEST_ASSERT_EQUAL_HEX64((uint64_t)-1, frame.rax);
+    TEST_ASSERT_EQUAL_HEX64((uint64_t)-EBADF, frame.rax);
 }
 
 /* --- sys_write (1) --- */
@@ -99,7 +100,7 @@ void test_unknown_syscall_warns_and_returns_error(void)
     syscall_handler_c(&frame);
 
     TEST_ASSERT_EQUAL_INT(1, print_call_count);
-    TEST_ASSERT_EQUAL_HEX64((uint64_t)-1, frame.rax);
+    TEST_ASSERT_EQUAL_HEX64((uint64_t)-ENOSYS, frame.rax);
 }
 
 /* sys_exit (60) is intentionally not covered here: on a real failure it never

@@ -129,6 +129,17 @@ typedef struct process {
   uint64_t cr3; // Page table physical address
 
   /**
+   * @brief Shared refcount for a CLONE_VM thread group's address space, or
+   * NULL for a process that owns its pagetable outright (fork()/
+   * create_user_process()). Every process_t sharing one pml4 (see
+   * clone_process()) points at the same heap-allocated counter; the
+   * pagetable is only torn down (in reap_zombies()/wait_reap_child()) once
+   * it drops to zero, so one thread exiting doesn't yank the address space
+   * out from under a still-running sibling.
+   */
+  uint64_t *vm_refcount;
+
+  /**
    * @brief The current state of the process (e.g., ready, running, blocked, dead).
    */
   process_state_t state;
@@ -289,6 +300,30 @@ process_t *create_user_process(const char *path, int argc, char *const argv[]);
  * @return A pointer to the newly created child process, or NULL on failure.
  */
 process_t *fork_process(process_t *parent, const trapframe_t *regs);
+
+/**
+ * @brief Implements clone(): like fork_process(), except when `flags`
+ * includes CLONE_VM the child shares `parent`'s address space (refcounted
+ * via vm_refcount) instead of getting its own copy-on-write pagetable --
+ * i.e. a thread rather than a separate process. The child otherwise resumes
+ * exactly where `regs` left off (rax forced to 0), just like fork(), with
+ * one difference: if `child_stack` is non-zero it replaces the child's
+ * initial user rsp, since two threads sharing an address space can't also
+ * share a stack.
+ *
+ * Known limitation: brk/brk_start are snapshotted from `parent`, not
+ * shared, so two CLONE_VM threads both calling sbrk() can race and stomp
+ * each other's heap mapping. Tracked under the ptmalloc roadmap item in
+ * README.md (arenas/tcache are gated on the same gap).
+ * @param parent The process being cloned (must be a user process).
+ * @param regs The parent's user-mode register snapshot at the syscall.
+ * @param flags CLONE_* flags (see abi/clone.h); only CLONE_VM is recognized.
+ * @param child_stack Initial user rsp for the child, or 0 to inherit the
+ * parent's.
+ * @return A pointer to the newly created child process, or NULL on failure.
+ */
+process_t *clone_process(process_t *parent, const trapframe_t *regs,
+                          uint64_t flags, uint64_t child_stack);
 
 /**
  * @brief Replaces `proc`'s address space with a freshly loaded ELF image,

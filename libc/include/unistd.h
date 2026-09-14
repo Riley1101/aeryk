@@ -71,6 +71,34 @@ int dup2(int oldfd, int newfd);
 int fork(void);
 
 /**
+ * @brief Raw clone(2)-style syscall: creates a new process/thread that
+ * resumes at the same place as this call (like fork()), except when
+ * CLONE_VM (see <abi/clone.h>) is set in `flags` the child shares this
+ * process's address space instead of getting a copy-on-write copy, and
+ * `stack` (if non-NULL) replaces the child's initial user stack pointer --
+ * needed since two threads sharing an address space can't also share a
+ * stack.
+ * @param flags CLONE_* flags; only CLONE_VM is recognized so far.
+ * @param stack Top of the child's stack, or NULL to inherit this process's
+ * own stack pointer (only sound for flags == 0, i.e. fork-like use).
+ * @return 0 in the child, the child's pid in the parent, or -1 on error
+ * (errno set).
+ */
+int clone(uint64_t flags, void *stack);
+
+/**
+ * @brief Minimal pthread_create()-alike built on clone(CLONE_VM, ...): runs
+ * `fn(arg)` on a new thread sharing this process's address space, using the
+ * memory at [stack, stack + stack_size) as that thread's stack.
+ * @param fn The function the new thread starts running.
+ * @param stack Base (lowest address) of a caller-allocated stack region.
+ * @param stack_size Size of that region in bytes.
+ * @param arg Passed through to `fn` on the new thread.
+ * @return The new thread's pid, or -1 on error (errno set; see clone()).
+ */
+int thread_create(int (*fn)(void *), void *stack, size_t stack_size, void *arg);
+
+/**
  * @brief Replaces the calling process's image with a new executable,
  * keeping the same pid, parent, and open file descriptors. Named after
  * Linux's execve syscall (number 59), though this simplifies the

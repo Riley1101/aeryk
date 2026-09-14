@@ -1,3 +1,4 @@
+#include <abi/clone.h>
 #include <elf.h>
 #include <gdt.h>
 #include <pipe.h>
@@ -551,25 +552,61 @@ static void fork_trampoline(void)
 }
 
 /**
- * @brief Forks the currently running user process.
- * Copy-on-write clones `parent`'s address space and copies its file
- * descriptor table into a new process, and arranges for it to resume in
- * user mode at the exact point captured in `regs`, except with a return
- * value of 0.
+ * @brief Forks the currently running user process. Thin wrapper over
+ * clone_process() with no CLONE_* flags and no stack override, i.e. an
+ * independent copy-on-write address space and the child resuming with the
+ * parent's own rsp -- see clone_process() for the shared implementation.
  */
 process_t *fork_process(process_t *parent, const trapframe_t *regs)
 {
-    uint64_t *child_pml4 =
-        vmm_clone_user_pagetable((uint64_t *)(parent->cr3 + hhdm_offset));
-    if (!child_pml4)
+    return clone_process(parent, regs, 0, 0);
+}
+
+/**
+ * @brief Implements both fork() (flags == 0) and clone() (CLONE_VM set).
+ * See process.h for the full behavior contract.
+ */
+process_t *clone_process(process_t *parent, const trapframe_t *regs,
+                          uint64_t flags, uint64_t child_stack)
+{
+    uint64_t *child_pml4;
+    uint64_t *vm_refcount = NULL;
+
+    if (flags & CLONE_VM)
     {
-        return NULL;
+        // Share the parent's address space outright instead of COW-cloning
+        // it. First thread to spawn off `parent` allocates the shared
+        // counter (seeded at 1 for the parent itself); later siblings just
+        // bump it.
+        if (!parent->vm_refcount)
+        {
+            parent->vm_refcount = (uint64_t *)kmalloc(sizeof(uint64_t));
+            if (!parent->vm_refcount)
+            {
+                return NULL;
+            }
+            *parent->vm_refcount = 1;
+        }
+        child_pml4 = (uint64_t *)(parent->cr3 + hhdm_offset);
+        vm_refcount = parent->vm_refcount;
+    }
+    else
+    {
+        child_pml4 =
+            vmm_clone_user_pagetable((uint64_t *)(parent->cr3 + hhdm_offset));
+        if (!child_pml4)
+        {
+            return NULL;
+        }
     }
 
     process_t *child = (process_t *)kmalloc(sizeof(process_t));
     if (!child)
     {
-        vmm_destroy_user_pagetable(child_pml4);
+        if (!vm_refcount)
+        {
+            vmm_destroy_user_pagetable(child_pml4);
+        }
         return NULL;
     }
     memset(child, 0, sizeof(process_t));
@@ -578,7 +615,10 @@ process_t *fork_process(process_t *parent, const trapframe_t *regs)
     if (!kernel_stack_phys)
     {
         kfree(child);
-        vmm_destroy_user_pagetable(child_pml4);
+        if (!vm_refcount)
+        {
+            vmm_destroy_user_pagetable(child_pml4);
+        }
         return NULL;
     }
     child->kernel_stack = (void *)((uint64_t)kernel_stack_phys + hhdm_offset);
@@ -586,10 +626,17 @@ process_t *fork_process(process_t *parent, const trapframe_t *regs)
     child->pid = next_pid++;
     child->state = PROCESS_READY;
     child->entry = parent->entry;
-    child->user_stack_top = parent->user_stack_top;
+    child->user_stack_top = child_stack ? child_stack : parent->user_stack_top;
+    // Snapshotted, not shared -- see the "known limitation" note on
+    // clone_process() in process.h.
     child->brk_start = parent->brk_start;
     child->brk = parent->brk;
     child->cr3 = (uint64_t)child_pml4 - hhdm_offset;
+    child->vm_refcount = vm_refcount;
+    if (vm_refcount)
+    {
+        (*vm_refcount)++;
+    }
     child->parent = parent;
     memcpy(child->fd_table, parent->fd_table, sizeof(child->fd_table));
     // The memcpy above gives the child fds that alias the same pipe_t as
@@ -610,7 +657,11 @@ process_t *fork_process(process_t *parent, const trapframe_t *regs)
     }
 
     child->fork_frame = *regs;
-    child->fork_frame.rax = 0; // fork() returns 0 in the child
+    child->fork_frame.rax = 0; // fork()/clone() return 0 in the child
+    if (child_stack)
+    {
+        child->fork_frame.rsp = child_stack;
+    }
 
     // when fork_trampoline returns (it shouldn't), land here instead of 0
     child->rsp = setup_kernel_stack(child->kernel_stack, fork_trampoline);
@@ -664,6 +715,34 @@ void process_release_fds(process_t *proc)
  * (orphaned) processes are auto-reaped here.
  *
  */
+
+/**
+ * @brief Tears down `proc`'s pagetable, unless it's a kernel thread (shares
+ * the kernel pml4, never owns one) or a CLONE_VM thread whose address space
+ * a live sibling still shares -- see the vm_refcount doc comment in
+ * process.h. Common to reap_zombies() and wait_reap_child(), the only two
+ * places a process's resources are actually freed.
+ * @param proc The dead process being reaped.
+ * @param kernel_cr3 vmm_get_kernel_pml4()'s physical address, passed in
+ * rather than recomputed per call.
+ */
+static void destroy_process_vm(process_t *proc, uint64_t kernel_cr3)
+{
+    if (proc->cr3 == kernel_cr3)
+    {
+        return;
+    }
+    if (proc->vm_refcount)
+    {
+        if (--(*proc->vm_refcount) > 0)
+        {
+            return; // a sibling thread still shares this address space
+        }
+        kfree(proc->vm_refcount);
+    }
+    vmm_destroy_user_pagetable((uint64_t *)(proc->cr3 + hhdm_offset));
+}
+
 static void reap_zombies(void)
 {
     if (!process_queue)
@@ -701,12 +780,7 @@ static void reap_zombies(void)
         }
 
         pmm_free_page((void *)((uint64_t)victim->kernel_stack - hhdm_offset));
-        // Kernel threads share the kernel pml4 and must keep it; only a user
-        // process owns a private pagetable that needs tearing down.
-        if (victim->cr3 != kernel_cr3)
-        {
-            vmm_destroy_user_pagetable((uint64_t *)(victim->cr3 + hhdm_offset));
-        }
+        destroy_process_vm(victim, kernel_cr3);
         kfree(victim);
 
         if (!process_queue)
@@ -778,10 +852,7 @@ int wait_reap_child(process_t *parent, int64_t pid, int *status_out)
 
     uint64_t kernel_cr3 = (uint64_t)vmm_get_kernel_pml4() - hhdm_offset;
     pmm_free_page((void *)((uint64_t)found->kernel_stack - hhdm_offset));
-    if (found->cr3 != kernel_cr3)
-    {
-        vmm_destroy_user_pagetable((uint64_t *)(found->cr3 + hhdm_offset));
-    }
+    destroy_process_vm(found, kernel_cr3);
     kfree(found);
 
     return (int)found_pid;

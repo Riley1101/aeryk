@@ -1,10 +1,30 @@
 #include <unistd.h>
 #include <sys/syscall.h>
+#include <abi/clone.h>
+#include <errno.h>
+#include <stdlib.h>
+
+/**
+ * @brief Translates a raw syscall return value into the libc convention.
+ *
+ * Kernel syscall handlers return -errno directly in rax on failure (see
+ * kernel/src/arch/x86_64/syscall.c), matching Linux. This is the userland
+ * half of that split: stash the positive code in `errno` and normalize the
+ * return to -1, so callers can keep checking `< 0` without knowing the
+ * magic negative-range convention.
+ */
+static long syscall_ret(long ret) {
+  if (ret < 0 && ret > -4096) {
+    errno = (int)-ret;
+    return -1;
+  }
+  return ret;
+}
 
 /**
  * @brief Opens a file.
  * @param path The path to the file.
- * @return Returns the file descriptor or -1 on error.
+ * @return Returns the file descriptor or -1 on error (errno set).
  */
 int open(const char *path) {
   long ret;
@@ -12,7 +32,7 @@ int open(const char *path) {
                 : "=a"(ret)
                 : "0"(SYS_open), "D"(path)
                 : "rcx", "r11", "memory");
-  return (int)ret;
+  return (int)syscall_ret(ret);
 }
 
 /**
@@ -20,7 +40,7 @@ int open(const char *path) {
  * @param fd The file descriptor to read from.
  * @param buf The buffer to read into.
  * @param count The number of bytes to read.
- * @return Returns the number of bytes read or -1 on error.
+ * @return Returns the number of bytes read or -1 on error (errno set).
  */
 ssize_t read(int fd, void *buf, size_t count) {
   long ret;
@@ -28,7 +48,7 @@ ssize_t read(int fd, void *buf, size_t count) {
                 : "=a"(ret)
                 : "0"(SYS_read), "D"(fd), "S"(buf), "d"(count)
                 : "rcx", "r11", "memory");
-  return ret;
+  return syscall_ret(ret);
 }
 
 /**
@@ -36,7 +56,7 @@ ssize_t read(int fd, void *buf, size_t count) {
  * @param fd The file descriptor to write to.
  * @param buf The buffer to write from.
  * @param count The number of bytes to write.
- * @return Returns the number of bytes written or -1 on error.
+ * @return Returns the number of bytes written or -1 on error (errno set).
  */
 ssize_t write(int fd, const void *buf, size_t count) {
   long ret;
@@ -44,13 +64,13 @@ ssize_t write(int fd, const void *buf, size_t count) {
                 : "=a"(ret)
                 : "0"(SYS_write), "D"(fd), "S"(buf), "d"(count)
                 : "rcx", "r11", "memory");
-  return ret;
+  return syscall_ret(ret);
 }
 
 /**
  * @brief Closes a file descriptor.
  * @param fd The file descriptor to close.
- * @return Returns 0 on success or -1 on error.
+ * @return Returns 0 on success or -1 on error (errno set).
  */
 int close(int fd) {
   long ret;
@@ -58,13 +78,13 @@ int close(int fd) {
                 : "=a"(ret)
                 : "0"(SYS_close), "D"(fd)
                 : "rcx", "r11", "memory");
-  return (int)ret;
+  return (int)syscall_ret(ret);
 }
 
 /**
  * @brief Creates an unnamed pipe.
  * @param fds Filled with fds[0] (read end) and fds[1] (write end).
- * @return Returns 0 on success or -1 on error.
+ * @return Returns 0 on success or -1 on error (errno set).
  */
 int pipe(int fds[2]) {
   long ret;
@@ -72,13 +92,13 @@ int pipe(int fds[2]) {
                 : "=a"(ret)
                 : "0"(SYS_pipe), "D"(fds)
                 : "rcx", "r11", "memory");
-  return (int)ret;
+  return (int)syscall_ret(ret);
 }
 
 /**
  * @brief Duplicates a file descriptor onto the lowest-numbered unused fd.
  * @param oldfd The file descriptor to duplicate.
- * @return Returns the new file descriptor or -1 on error.
+ * @return Returns the new file descriptor or -1 on error (errno set).
  */
 int dup(int oldfd) {
   long ret;
@@ -86,14 +106,14 @@ int dup(int oldfd) {
                 : "=a"(ret)
                 : "0"(SYS_dup), "D"(oldfd)
                 : "rcx", "r11", "memory");
-  return (int)ret;
+  return (int)syscall_ret(ret);
 }
 
 /**
  * @brief Duplicates a file descriptor onto a specific fd number.
  * @param oldfd The file descriptor to duplicate.
  * @param newfd The file descriptor number to duplicate it onto.
- * @return Returns newfd on success or -1 on error.
+ * @return Returns newfd on success or -1 on error (errno set).
  */
 int dup2(int oldfd, int newfd) {
   long ret;
@@ -101,13 +121,13 @@ int dup2(int oldfd, int newfd) {
                 : "=a"(ret)
                 : "0"(SYS_dup2), "D"(oldfd), "S"(newfd)
                 : "rcx", "r11", "memory");
-  return (int)ret;
+  return (int)syscall_ret(ret);
 }
 
 /**
  * @brief Forks the calling process.
  * @return Returns 0 in the child, the child's pid in the parent, or -1 on
- * error.
+ * error (errno set).
  */
 int fork(void) {
   long ret;
@@ -115,7 +135,38 @@ int fork(void) {
                 : "=a"(ret)
                 : "0"(SYS_fork)
                 : "rcx", "r11", "memory");
-  return (int)ret;
+  return (int)syscall_ret(ret);
+}
+
+/**
+ * @brief Raw clone(2)-style syscall. See unistd.h.
+ */
+int clone(uint64_t flags, void *stack) {
+  long ret;
+  asm volatile("syscall"
+                : "=a"(ret)
+                : "0"(SYS_clone), "D"(flags), "S"(stack)
+                : "rcx", "r11", "memory");
+  return (int)syscall_ret(ret);
+}
+
+/**
+ * @brief Minimal pthread_create()-alike built on clone(CLONE_VM, ...). See
+ * unistd.h.
+ */
+int thread_create(int (*fn)(void *), void *stack, size_t stack_size, void *arg) {
+  // Stack grows down; start the child at the top of the region, 16-byte
+  // aligned per the x86_64 SysV ABI.
+  uint64_t top = ((uint64_t)stack + stack_size) & ~(uint64_t)0xF;
+
+  int pid = clone(CLONE_VM, (void *)top);
+  if (pid == 0) {
+    // Child: clone() resumes here at the exact same C statement as the
+    // parent (like fork()), just on the new stack -- branch here instead
+    // of falling through to whatever the parent does next.
+    exit(fn(arg));
+  }
+  return pid;
 }
 
 /**
@@ -125,7 +176,7 @@ int fork(void) {
  * @param path The path to the executable.
  * @param argv NULL-terminated array of argument strings; conventionally
  * argv[0] is the program name, but that's the caller's responsibility.
- * @return Returns -1 on error. Does not return on success.
+ * @return Returns -1 on error (errno set). Does not return on success.
  */
 int execve(const char *path, char *const argv[]) {
   long ret;
@@ -133,14 +184,15 @@ int execve(const char *path, char *const argv[]) {
                 : "=a"(ret)
                 : "0"(SYS_execve), "D"(path), "S"(argv)
                 : "rcx", "r11", "memory");
-  return (int)ret;
+  return (int)syscall_ret(ret);
 }
 
 /**
  * @brief Waits for a child process to terminate.
  * @param pid The process ID of the child to wait for.
  * @param status A pointer to an integer where the exit status will be stored.
- * @return Returns the pid of the terminated child or -1 on error.
+ * @return Returns the pid of the terminated child or -1 on error (errno
+ * set).
  */
 int wait (int pid, int *status) {
   long ret;
@@ -148,7 +200,7 @@ int wait (int pid, int *status) {
                 : "=a"(ret)
                 : "0"(SYS_wait), "D"(pid), "S"(status)
                 : "rcx", "r11", "memory");
-  return (int)ret;
+  return (int)syscall_ret(ret);
 }
 
 /**
@@ -192,7 +244,7 @@ void *sbrk(int64_t increment) {
  * @param path The path to the directory.
  * @param buf Destination buffer.
  * @param size The size of buf.
- * @return The number of bytes written, or -1 if path is not a directory.
+ * @return The number of bytes written, or -1 on error (errno set).
  */
 ssize_t listdir(const char *path, char *buf, size_t size) {
   long ret;
@@ -200,5 +252,5 @@ ssize_t listdir(const char *path, char *buf, size_t size) {
                 : "=a"(ret)
                 : "0"(SYS_readdir), "D"(path), "S"(buf), "d"(size)
                 : "rcx", "r11", "memory");
-  return ret;
+  return syscall_ret(ret);
 }

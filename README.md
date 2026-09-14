@@ -40,7 +40,7 @@ A x86_64 kernel written in C, booted via the [Limine](https://codeberg.org/Limin
   - [x] sys_spawn and sys_wait
   - [x] Context switching with MLFQ
   - [x] fork, execve
-  - [ ] clone
+  - [x] clone (CLONE_VM only: threads share an address space via a refcounted pagetable instead of COW-cloning it; CLONE_FILES and shared brk/heap are not implemented yet)
   - [x] Kill offending process (not halt kernel) on a CPL 3 fault (idt.c isr_handler)
   - [x] copy_from_user / copy_to_user with an exception table, so a bad pointer passed into a syscall (e.g. `read(fd, (void*)0xdeadbeef, 100)`) kills the calling process instead of the kernel. Needed because syscalls run at CPL 0, so the CPL-3 fault check above can't tell a bad user pointer apart from a real kernel bug there; requires tagging user-memory-touching instructions and checking the faulting rip against that table.
 - [x] Initramfs
@@ -54,8 +54,8 @@ A x86_64 kernel written in C, booted via the [Limine](https://codeberg.org/Limin
   - [x] Shell pipelines (`cmd1 | cmd2 | ...`), wiring dup2 across forked stages
 
 - [ ] Syscall hardening
-  - [ ] errno (syscalls currently collapse all failures to -1)
-  - [ ] clone
+  - [x] errno (kernel syscalls return -errno on failure; libc wrappers translate that into the `errno` global + a -1 return)
+  - [x] clone (CLONE_VM only — see above)
 
 - [ ] CI / test infra (cheap now, expensive to retrofit after SMP/compositor land)
   - [ ] Finish serial driver (currently debug-only, "not complete") — needed as the output channel for a CI smoke test
@@ -63,20 +63,12 @@ A x86_64 kernel written in C, booted via the [Limine](https://codeberg.org/Limin
 
 - [ ] Userland memory management (prerequisite for compositor)
   - [x] Userland heap allocation (brk)
-  - [ ] Shared memory mapping between processes (mmap MAP_SHARED)
+  - [ ] Shared memory mapping between processes (mmap MAP_SHARED) — needed for compositor client/server shared buffers
   - [x] stdlib.c: malloc, free, calloc (libc wrappers over the above)
-
-- [ ] SMP (I have no clue what this is)
-
-- [ ] Benchmarking (rdtsc + serial print, wired into CI as regression guardrails once the QEMU smoke test above exists)
-  - [ ] Context switch latency (switch.asm)
-  - [ ] Syscall entry/exit overhead (syscall_entry.asm)
-  - [ ] Allocator alloc/free latency (slab now, malloc once userland heap lands)
-  - [ ] Framebuffer blit throughput — needed to prove the word-sized memcpy fix below actually helps
 
 - [ ] Mouse driver (PS/2) — lands before compositor windowing, not in parallel
 
-- [ ] Compositor
+- [ ] Compositor (GUI land — the goal before circling back to threads/SMP)
   - [ ] Framebuffer mapped into userland
   - [ ] Word-sized memcpy (currently byte-at-a-time, too slow for full-frame blits)
   - [ ] Write-combining framebuffer mapping (PAT/MTRR)
@@ -88,6 +80,37 @@ A x86_64 kernel written in C, booted via the [Limine](https://codeberg.org/Limin
   - [ ] Input routing (hit-testing, focus)
   - [ ] Cursor rendering
   - [ ] First real client (test window drawing into shared buffer)
+
+- [ ] Threading (clone(CLONE_VM) today is just the primitive a thread library would sit on top of, not a usable threading facility). Comes after the compositor lands: it's the workload that makes SMP worth adding and gives a single-core baseline to benchmark against.
+  - [ ] CLONE_FILES (shared fd table between threads — currently each cloned thread gets its own copy, like fork)
+  - [ ] Shared brk/heap between CLONE_VM threads (currently snapshotted at clone time, so concurrent sbrk() from two threads can stomp each other's page mapping — blocks real multi-threaded malloc, see the ptmalloc arenas/tcache items below)
+  - [ ] Synchronization primitives (mutex/futex/spinlock) — nothing stops two threads racing the same memory today; clonetest.c only avoids it by using wait() as a crude join
+  - [ ] Coordinated thread-group teardown (an unhandled fault or exit() in one thread should plausibly kill/signal its siblings, not just itself)
+
+- [ ] SMP (I have no clue what this is) — the actual point of doing Threading above: without SMP, "threads" only means multiple schedulable contexts sharing memory on one CPU, not concurrent execution
+
+- [ ] Benchmarking (rdtsc + serial print, wired into CI as regression guardrails once the QEMU smoke test above exists) — the payoff: single-core vs. SMP-parallel comparisons once both exist
+  - [ ] Context switch latency (switch.asm)
+  - [ ] Syscall entry/exit overhead (syscall_entry.asm)
+  - [ ] Allocator alloc/free latency (slab now, malloc once userland heap lands)
+  - [ ] Framebuffer blit throughput — needed to prove the word-sized memcpy fix above actually helps
+  - [ ] Single-core vs. SMP compositor throughput once both Threading and SMP land — the comparison this whole sequence is building toward
+
+- [ ] ptmalloc-style allocator (currently a single-free-list K&R allocator; move toward glibc's design) — low priority, orthogonal to the GUI/threading path above
+  - [ ] Boundary-tag chunks (size at both ends of a block, so `free()` coalesces with its physical neighbor in O(1) instead of walking a list)
+  - [ ] Segregated bins (fastbins for small sizes, size-class bins for mid/large, instead of one linear free list)
+  - [ ] Top chunk / wilderness (one chunk always at the high end of the heap absorbing `sbrk()` growth, out of the `malloc()` search path)
+  - [ ] mmap threshold for large allocations — needs `mmap`/`munmap` syscalls first (not in the ABI yet)
+  - [ ] Arenas + locking — gated on the Threading section above (needs shared brk + real sync primitives, not just clone(CLONE_VM))
+  - [ ] tcache (per-thread free lists) — also gated on Threading above
+
+- [ ] Kernel-space buddy allocator (Linux-style, sits under the slab allocator) — low priority, orthogonal to the GUI/threading path above
+  - [ ] Replace the flat bitmap PMM with per-order (power-of-2) free lists
+  - [ ] Buddy address computation (XOR with block size) for O(1) coalescing on free
+  - [ ] Block splitting on alloc when the requested order has no free block
+  - [ ] Keep `pmm_alloc_page`/`pmm_free_page` as the order-0 case so `slab.c` needs no changes
+  - [ ] Multi-page contiguous allocation API (`pmm_alloc_order(n)`) for callers needing >1 page (e.g. framebuffer, large DMA-style buffers)
+  - [ ] Carry per-page refcounts through at order-0 granularity (COW stays page-level even once buddy lands)
 
 ## Libc Notes
 
@@ -101,7 +124,7 @@ A x86_64 kernel written in C, booted via the [Limine](https://codeberg.org/Limin
 - [ ] stdlib.c: malloc, free, calloc — tracked under "Userland memory management" above
 - [ ] stdio.c: sprintf, snprintf (format into a buffer, needed for compositor protocol / error messages)
 - [ ] atoi
-- [ ] errno — tracked under "Syscall hardening" above
+- [x] errno — tracked under "Syscall hardening" above
 
 ## Build
 

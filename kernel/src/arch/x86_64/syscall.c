@@ -6,6 +6,7 @@
 #include <arch/x86_64/drivers/keyboard.h>
 #include <arch/x86_64/drivers/serial.h>
 
+#include <abi/errno.h>
 #include <pipe.h>
 #include <pmm.h>
 #include <process.h>
@@ -133,7 +134,7 @@ void syscall_handler_c(struct syscall_frame *frame)
                                       (uint8_t *)fd->node->data + fd->offset,
                                       bytes_to_read) != 0)
                     {
-                        frame->rax = -1;
+                        frame->rax = (uint64_t)-EFAULT;
                         break;
                     }
                     fd->offset += bytes_to_read;
@@ -142,12 +143,12 @@ void syscall_handler_c(struct syscall_frame *frame)
             }
             else
             {
-                frame->rax = -1;
+                frame->rax = (uint64_t)-EBADF;
             }
         }
         else
         {
-            frame->rax = -1;
+            frame->rax = (uint64_t)-EBADF;
         }
         break;
 
@@ -172,7 +173,7 @@ void syscall_handler_c(struct syscall_frame *frame)
         }
         else
         {
-            frame->rax = -1;
+            frame->rax = (uint64_t)-EBADF;
         }
         break;
     case SYS_open:
@@ -181,7 +182,7 @@ void syscall_handler_c(struct syscall_frame *frame)
         vfs_node_t *file = vfs_find_node(vfs_root, filename);
         if (!file || file->type != VFS_FILE)
         {
-            frame->rax = -1; // file not found
+            frame->rax = (uint64_t)-ENOENT;
             break;
         }
 
@@ -206,7 +207,7 @@ void syscall_handler_c(struct syscall_frame *frame)
         }
         else
         {
-            frame->rax = -1;
+            frame->rax = (uint64_t)-EMFILE;
         }
         break;
     }
@@ -232,7 +233,36 @@ void syscall_handler_c(struct syscall_frame *frame)
         };
 
         process_t *child = fork_process(current_process, &regs);
-        frame->rax = child ? (int64_t)child->pid : -1;
+        frame->rax = child ? (int64_t)child->pid : (uint64_t)-ENOMEM;
+        break;
+    }
+    case SYS_clone:
+    {
+        // Same trapframe replay as SYS_fork, just handed to clone_process()
+        // with the flags/child-stack args instead. Matches the raw Linux
+        // clone(2) syscall's arg order (flags in rdi, stack in rsi);
+        // parent_tid/child_tid/tls (rdx/r10/r8) aren't implemented yet.
+        trapframe_t regs = {
+            .rdi = frame->rdi,
+            .rsi = frame->rsi,
+            .rdx = frame->rdx,
+            .r10 = frame->r10,
+            .r8 = frame->r8,
+            .r9 = frame->r9,
+            .rbx = frame->rbx,
+            .rbp = frame->rbp,
+            .r12 = frame->r12,
+            .r13 = frame->r13,
+            .r14 = frame->r14,
+            .r15 = frame->r15,
+            .rax = frame->rax,
+            .rip = frame->user_rip,
+            .rflags = frame->user_rflags,
+            .rsp = frame->user_rsp,
+        };
+
+        process_t *child = clone_process(current_process, &regs, frame->rdi, frame->rsi);
+        frame->rax = child ? (int64_t)child->pid : (uint64_t)-ENOMEM;
         break;
     }
     case SYS_execve:
@@ -240,7 +270,7 @@ void syscall_handler_c(struct syscall_frame *frame)
         const char *user_path = (const char *)frame->rdi;
         if (!user_path)
         {
-            frame->rax = -1;
+            frame->rax = (uint64_t)-EFAULT;
             break;
         }
 
@@ -254,7 +284,7 @@ void syscall_handler_c(struct syscall_frame *frame)
 
         if (i == 0)
         {
-            frame->rax = -1;
+            frame->rax = (uint64_t)-EINVAL;
             break;
         }
 
@@ -263,14 +293,15 @@ void syscall_handler_c(struct syscall_frame *frame)
         int argc = copy_argv_from_user((const char *const *)frame->rsi, strs, argv);
         if (argc == 0)
         {
-            frame->rax = -1;
+            frame->rax = (uint64_t)-EINVAL;
             break;
         }
 
         // On success exec_process() jumps directly into the new program
-        // and never returns here. Only the failure path sets rax.
+        // and never returns here. Only the failure path sets rax (always
+        // -1, e.g. file missing/not ELF/bad argv — see load_elf_into_new_pagetable).
         exec_process(current_process, path, argc, argv);
-        frame->rax = -1;
+        frame->rax = (uint64_t)-ENOENT;
         break;
     }
     case SYS_readdir:
@@ -281,9 +312,14 @@ void syscall_handler_c(struct syscall_frame *frame)
         uint32_t bufsize = (uint32_t)frame->rdx;
 
         vfs_node_t *dir = vfs_find_node(vfs_root, path);
-        if (!dir || dir->type != VFS_DIRECTORY)
+        if (!dir)
         {
-            frame->rax = -1;
+            frame->rax = (uint64_t)-ENOENT;
+            break;
+        }
+        if (dir->type != VFS_DIRECTORY)
+        {
+            frame->rax = (uint64_t)-ENOTDIR;
             break;
         }
 
@@ -323,7 +359,7 @@ void syscall_handler_c(struct syscall_frame *frame)
         if (written > 0 && copy_to_user(buf, kbuf, written) != 0)
         {
             serial_print("[dbg] SYS_readdir copy_to_user FAILED\n");
-            frame->rax = -1;
+            frame->rax = (uint64_t)-EFAULT;
             break;
         }
         serial_print("[dbg] SYS_readdir after copy_to_user OK\n");
@@ -351,10 +387,14 @@ void syscall_handler_c(struct syscall_frame *frame)
         if (result > 0 && status_user &&
             copy_to_user(status_user, &status, sizeof(status)) != 0)
         {
-            frame->rax = -1;
+            frame->rax = (uint64_t)-EFAULT;
             break;
         }
-        frame->rax = (uint64_t)(int64_t)result;
+        // wait_reap_child() only ever returns -1 for "no children of ours
+        // exist at all"; the blocking loop above already stops as soon as
+        // it sees a non-zero result, so a negative result here is always
+        // that ECHILD case, never some other error.
+        frame->rax = (result < 0) ? (uint64_t)-ECHILD : (uint64_t)(int64_t)result;
         break;
     }
     case SYS_brk:
@@ -424,7 +464,7 @@ void syscall_handler_c(struct syscall_frame *frame)
         }
         else
         {
-            frame->rax = -1;
+            frame->rax = (uint64_t)-EBADF;
         }
         break;
     case SYS_pipe:
@@ -451,14 +491,14 @@ void syscall_handler_c(struct syscall_frame *frame)
 
         if (read_fd == -1 || write_fd == -1)
         {
-            frame->rax = -1;
+            frame->rax = (uint64_t)-EMFILE;
             break;
         }
 
         pipe_t *p = pipe_create();
         if (!p)
         {
-            frame->rax = -1;
+            frame->rax = (uint64_t)-ENOMEM;
             break;
         }
 
@@ -476,7 +516,7 @@ void syscall_handler_c(struct syscall_frame *frame)
             current_process->fd_table[read_fd].pipe = NULL;
             current_process->fd_table[write_fd].type = FD_NONE;
             current_process->fd_table[write_fd].pipe = NULL;
-            frame->rax = -1;
+            frame->rax = (uint64_t)-EFAULT;
             break;
         }
         frame->rax = 0;
@@ -488,7 +528,7 @@ void syscall_handler_c(struct syscall_frame *frame)
         if (oldfd < 0 || oldfd >= MAX_FDS ||
             current_process->fd_table[oldfd].type == FD_NONE)
         {
-            frame->rax = -1;
+            frame->rax = (uint64_t)-EBADF;
             break;
         }
 
@@ -503,7 +543,7 @@ void syscall_handler_c(struct syscall_frame *frame)
         }
         if (newfd == -1)
         {
-            frame->rax = -1;
+            frame->rax = (uint64_t)-EMFILE;
             break;
         }
 
@@ -527,7 +567,7 @@ void syscall_handler_c(struct syscall_frame *frame)
         if (oldfd < 0 || oldfd >= MAX_FDS || newfd < 0 || newfd >= MAX_FDS ||
             current_process->fd_table[oldfd].type == FD_NONE)
         {
-            frame->rax = -1;
+            frame->rax = (uint64_t)-EBADF;
             break;
         }
 
@@ -579,7 +619,7 @@ void syscall_handler_c(struct syscall_frame *frame)
 
     default:
         print("unknown syscall");
-        frame->rax = -1;
+        frame->rax = (uint64_t)-ENOSYS;
         break;
     }
 }
