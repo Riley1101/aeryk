@@ -705,8 +705,45 @@ void syscall_handler_c(struct syscall_frame *frame)
         break;
     }
     case SYS_mouse_read:
-        frame->rax = mouse_read((mouse_packet_t *)frame->rdi, (int)frame->rsi);
+        frame->rax = mouse_read((mouse_packet_t *)frame->rdi, (int)frame->rsi,
+                                 (int)frame->rdx);
         break;
+
+    case SYS_sleep_ms:
+    {
+        // Same generic-PROCESS_BLOCKED spin-and-reschedule pattern as
+        // SYS_wait: no dedicated timer wait-queue, just re-check "have we
+        // reached the deadline yet" every time wake_blocked_processes()
+        // gives this process another turn (every schedule() call, e.g.
+        // the next timer tick). Fine for a coarse ~10ms-resolution sleep;
+        // not fine for anything demanding tight wakeup precision.
+        //
+        // Unlike SYS_wait (whose wakeup condition is driven by another
+        // process's own syscall path, e.g. SYS_exit reaping this waiter),
+        // this one can only ever become true via the timer ISR advancing
+        // `ticks`, so this loop has to spend its turns with interrupts
+        // unmasked: the `syscall` instruction clears EFLAGS.IF per
+        // MSR_FMASK on entry, and switch_task()'s pushfq/popfq carries
+        // whatever IF a process had when it yielded across every future
+        // resume of it, so without this sti the process would run every
+        // one of its own slices with the LAPIC timer masked and never see
+        // `ticks` move on its own account. schedule() itself re-masks for
+        // the duration of the switch and hands this IF=1 back on the far
+        // side (see its comment in process.c), so enabling here is safe.
+        // mouse_read() (mouse.c) does the same sti-before-block.
+        uint32_t ms = (uint32_t)frame->rdi;
+        uint64_t wake_tick = ticks + (ms + (1000 / TIMER_HZ) - 1) / (1000 / TIMER_HZ);
+
+        while (ticks < wake_tick)
+        {
+            current_process->state = PROCESS_BLOCKED;
+            asm volatile("sti");
+            schedule();
+        }
+
+        frame->rax = 0;
+        break;
+    }
 
     case SYS_fbmap:
     {
@@ -807,5 +844,14 @@ void init_syscalls(void)
 
     wrmsr(MSR_LSTAR, (uint64_t)syscall_entry);
 
-    wrmsr(MSR_FMASK, 0x200);
+    // Bits cleared from RFLAGS on `syscall` entry. IF (0x200) is the one
+    // that matters for correctness of the kernel's own critical sections,
+    // but the rest are the same set Linux masks and are cheap insurance:
+    // TF (0x100) so a user process that manages to set the trap flag
+    // single-steps *itself* rather than raising a #DB on the first kernel
+    // instruction after entry; DF (0x400) so the kernel's string ops are
+    // guaranteed to run forwards whatever the caller left set; and
+    // IOPL (0x3000), NT (0x4000) and AC (0x40000) so ring 3 can't hand
+    // the kernel a surprising execution environment either.
+    wrmsr(MSR_FMASK, 0x47700);
 }

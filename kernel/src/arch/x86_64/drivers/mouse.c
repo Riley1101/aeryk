@@ -107,7 +107,7 @@ void on_irq12(struct interrupt_frame *frame) {
   }
 }
 
-int mouse_read(mouse_packet_t *buf, int max_packets) {
+int mouse_read(mouse_packet_t *buf, int max_packets, int nonblock) {
   int n = 0;
 
   while (n < max_packets) {
@@ -120,10 +120,11 @@ int mouse_read(mouse_packet_t *buf, int max_packets) {
       continue;
     }
 
-    if (n > 0) {
-      // Already have at least one packet buffered up for the caller --
-      // hand those back now rather than blocking for more, same
-      // "return what's available" convention as a typical read().
+    if (n > 0 || nonblock) {
+      // Already have at least one packet buffered up for the caller (same
+      // "return what's available" convention as a typical read()), or the
+      // caller asked not to block at all -- either way, hand back
+      // whatever's in `n` (possibly 0) instead of yielding.
       asm volatile("sti");
       break;
     }

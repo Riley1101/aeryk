@@ -23,4 +23,14 @@ static inline uint64_t rdtsc(void) {
  */
 uint64_t get_tsc_hz(void);
 
+/**
+ * @brief Blocks the calling process for at least `ms` milliseconds
+ * (kernel/src/arch/x86_64/syscall.c's SYS_sleep_ms), rounded up to the
+ * timer's ~10ms tick resolution (TIMER_HZ). Not for tight timing --
+ * use rdtsc()/get_tsc_hz() for measurement, this is for pacing a loop
+ * (e.g. a redraw loop) without busy-spinning.
+ * @return 0 always.
+ */
+int sleep_ms(uint32_t ms);
+
 #endif // !_SYS_TSC_H

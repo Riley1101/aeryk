@@ -292,11 +292,11 @@ int munmap(void *addr, size_t length) {
 /**
  * @brief Reads decoded PS/2 mouse packets. See sys/mouse.h.
  */
-int mouse_read(mouse_packet_t *buf, int max_packets) {
+int mouse_read(mouse_packet_t *buf, int max_packets, int nonblock) {
   long ret;
   asm volatile("syscall"
                 : "=a"(ret)
-                : "0"(SYS_mouse_read), "D"(buf), "S"(max_packets)
+                : "0"(SYS_mouse_read), "D"(buf), "S"(max_packets), "d"(nonblock)
                 : "rcx", "r11", "memory");
   return (int)syscall_ret(ret);
 }
@@ -311,6 +311,19 @@ uint64_t get_tsc_hz(void) {
                 : "0"(SYS_get_tsc_hz)
                 : "rcx", "r11", "memory");
   return (uint64_t)syscall_ret(ret);
+}
+
+/**
+ * @brief Blocks the calling process for at least `ms` milliseconds. See
+ * sys/tsc.h.
+ */
+int sleep_ms(uint32_t ms) {
+  long ret;
+  asm volatile("syscall"
+                : "=a"(ret)
+                : "0"(SYS_sleep_ms), "D"(ms)
+                : "rcx", "r11", "memory");
+  return (int)syscall_ret(ret);
 }
 
 /**

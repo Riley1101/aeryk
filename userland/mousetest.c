@@ -9,7 +9,7 @@ void main(void) {
 
   for (int i = 0; i < 10; i++) {
     mouse_packet_t pkt;
-    int n = mouse_read(&pkt, 1);
+    int n = mouse_read(&pkt, 1, 0);
     if (n != 1) {
       printf("mousetest: mouse_read failed\n");
       exit(1);

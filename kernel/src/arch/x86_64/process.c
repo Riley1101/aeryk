@@ -120,14 +120,28 @@ static uint64_t setup_kernel_stack(void *kernel_stack_base,
 {
     uint64_t *stack = (uint64_t *)((uint64_t)kernel_stack_base + PAGE_SIZE);
 
+    // Must mirror switch_task()'s pop order exactly (switch.asm: pop r15,
+    // r14, r13, r12, rbp, rbx, then popfq, then `ret` pops the return
+    // address) -- since each push below lands at a *lower* address than
+    // the last, the pushes have to happen in the *reverse* of that pop
+    // order (last pushed = lowest address = popped first) for
+    // switch_task()'s fixed pop sequence to land each value in the
+    // register it's named for instead of the next slot over. Getting this
+    // backwards (as an earlier version of this did, pushing rflags last)
+    // doesn't crash outright -- r15 quietly ends up holding a value meant
+    // for rflags and vice versa -- but it does mean popfq loads whatever
+    // was written as r15's slot (0) instead of the intended 0x202, so
+    // every freshly created process's first-ever resume actually starts
+    // with IF=0 (silently relying on the stub itself -- fork_trampoline's
+    // explicit `sti` -- to fix that up) instead of the IF=1 this pushes.
     *(--stack) = (uint64_t)stub;
-    *(--stack) = 0; // r15
-    *(--stack) = 0; // r14
-    *(--stack) = 0; // r13
-    *(--stack) = 0; // r12
-    *(--stack) = 0; // rbp
-    *(--stack) = 0; // rbx
     *(--stack) = 0x202; // rflags (IF=1, reserved bit 1 set)
+    *(--stack) = 0; // rbx
+    *(--stack) = 0; // rbp
+    *(--stack) = 0; // r12
+    *(--stack) = 0; // r13
+    *(--stack) = 0; // r14
+    *(--stack) = 0; // r15
 
     return (uint64_t)stack;
 }
@@ -915,7 +929,7 @@ static void wake_blocked_processes(process_t *self)
  * processes and manages the multi-level feedback queue (MLFQ) for process prioritization.
  * If the current process is the same as the next process, no context switch occurs.
  */
-void schedule()
+static void schedule_locked(void)
 {
     if (!current_process)
         return;
@@ -951,6 +965,40 @@ void schedule()
     }
 
     switch_task(prev, next);
+}
+
+/**
+ * @brief Runs the scheduler with interrupts masked, restoring the caller's
+ * own interrupt-enable state on return.
+ *
+ * schedule_locked() mutates global scheduler state (the MLFQ queues,
+ * `current_process`, the TSS RSP0 / `kernel_rsp_scratch` pair) and then
+ * context-switches -- none of which is reentrant. Voluntary yields reach
+ * it from syscall context with IF=1 (SYS_sleep_ms and mouse_read() both
+ * sti before blocking so the wakeup they are waiting on can actually
+ * fire), so without this mask a timer IRQ landing inside the critical
+ * window drives mlfq_on_tick() -> schedule() *on the yielding process's
+ * kernel stack, after `current_process` has already been pointed at the
+ * incoming process but before switch_task() has run*. The nested
+ * switch_task() then saves the outgoing process's rsp into the *incoming*
+ * process's `rsp` field, so two processes end up resuming on one kernel
+ * stack; the next popfq in switch_task() reads whatever happens to sit
+ * there instead of a saved RFLAGS -- observed as a #DB panic in kernel
+ * mode with a garbage EFLAGS (TF/DF/NT/IOPL all set) a couple of seconds
+ * into the compositor's ~60Hz redraw loop.
+ *
+ * The saved flags are restored on the far side of the switch, i.e. when
+ * *this* process is scheduled back in, so a caller that yielded with
+ * interrupts enabled still gets them back. switch_task()'s own
+ * pushfq/popfq carries the masked IF=0 across the switch, which is why
+ * the restore here is required and not merely tidy.
+ */
+void schedule(void)
+{
+    uint64_t flags;
+    __asm__ volatile("pushfq\n\tpop %0\n\tcli" : "=r"(flags) : : "memory");
+    schedule_locked();
+    __asm__ volatile("push %0\n\tpopfq" : : "r"(flags) : "memory", "cc");
 }
 
 /**

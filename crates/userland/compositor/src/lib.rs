@@ -5,23 +5,34 @@
 //! client processes (see aeryk_compositor_protocol for how, given this
 //! kernel has no cross-exec shared memory yet), and redraws the whole
 //! screen -- background, every active window, then the mouse cursor on
-//! top -- each time a mouse packet arrives. Full-repaint rather than the
-//! save/restore-under-cursor trick the first cursor-only version used:
-//! once window content can change on its own (a client pushes a new
-//! frame) independently of mouse movement, a saved-pixels cache goes
-//! stale and starts painting over fresh window content, so this redraws
-//! everything instead. Per-window damage tracking and a timer/vsync-driven
-//! redraw (rather than only-on-mouse-motion) are separate, later README
-//! items -- this is deliberately the simplest version that's still correct.
+//! top -- on a fixed timer tick (see FRAME_MS/SYS_sleep_ms), polling the
+//! mouse non-blockingly each tick rather than blocking on it. Full-repaint
+//! rather than the save/restore-under-cursor trick the first cursor-only
+//! version used: once window content can change on its own (a client
+//! pushes a new frame) independently of mouse movement, a saved-pixels
+//! cache goes stale and starts painting over fresh window content, so
+//! this redraws everything instead. Originally this loop blocked on
+//! mouse_read() and only ever redrew on mouse motion -- a client pushing
+//! frames with the mouse untouched would just never appear. Per-window
+//! damage tracking (only re-blit what actually changed) is a separate,
+//! later README item -- this is deliberately the simplest version that's
+//! still correct.
 
 use aeryk_compositor_protocol::{WindowRequest, WindowSlot, MAX_WINDOWS, MAX_WIN_H, MAX_WIN_W};
 use aeryk_user_rt::{
     fb::fbmap,
     mman::{mmap, MAP_ANONYMOUS, MAP_FAILED, MAP_SHARED, PROT_READ, PROT_WRITE},
     mouse::mouse_read,
-    sys::{close, dup2, execve, exit, fork, pipe, puts, read, wait},
+    sys::{close, dup2, execve, exit, fork, pipe, puts, read, sleep_ms, wait},
     FbInfo, MousePacket,
 };
+
+// Redraw cadence for the timer-driven loop below (~60Hz nominal; actual
+// resolution is capped at TIMER_HZ=100/10ms by SYS_sleep_ms, see
+// kernel/src/arch/x86_64/syscall.c). Independent of mouse motion, since
+// window content (a client pushing a new frame) can change on its own --
+// see the module docs above and README.md's Compositor section.
+const FRAME_MS: u32 = 16;
 
 const BG_COLOR: u32 = 0xff282828; // matches tty.h's BG
 const CURSOR_COLOR: u32 = 0xffebdbb2; // light foreground, visible on BG
@@ -282,16 +293,20 @@ pub extern "C" fn main(_argc: i32, _argv: *const *const u8) -> i32 {
     redraw(cx, cy);
 
     loop {
+        // Drain whatever mouse packets are buffered without blocking --
+        // the redraw below needs to happen every tick regardless of
+        // whether the mouse moved, so this loop can no longer afford to
+        // sit inside mouse_read() waiting for one.
         let mut pkt = MousePacket::zeroed();
-        let n = unsafe { mouse_read(&mut pkt as *mut MousePacket, 1) };
-        if n != 1 {
-            continue;
+        while unsafe { mouse_read(&mut pkt as *mut MousePacket, 1, 1) } == 1 {
+            cx = clamp(cx + pkt.dx as i32, 0, width as i32 - 1);
+            // PS/2 reports positive dy as "moved up"; screen y grows downward.
+            cy = clamp(cy - pkt.dy as i32, 0, height as i32 - 1);
         }
 
-        cx = clamp(cx + pkt.dx as i32, 0, width as i32 - 1);
-        // PS/2 reports positive dy as "moved up"; screen y grows downward.
-        cy = clamp(cy - pkt.dy as i32, 0, height as i32 - 1);
-
         redraw(cx, cy);
+        unsafe {
+            sleep_ms(FRAME_MS);
+        }
     }
 }

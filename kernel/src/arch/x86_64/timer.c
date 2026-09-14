@@ -14,7 +14,7 @@
 volatile uint64_t ticks;
 volatile uint64_t tsc_hz;
 
-const uint32_t freq = 100;
+const uint32_t freq = TIMER_HZ;
 
 void on_irq0(struct interrupt_frame *frame) {
   (void)frame;

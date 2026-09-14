@@ -35,5 +35,6 @@
 #define SYS_mouse_read 90
 #define SYS_fbmap 91
 #define SYS_get_tsc_hz 92
+#define SYS_sleep_ms 93
 
 #endif // !_ABI_SYSCALL_H

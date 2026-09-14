@@ -13,4 +13,5 @@ unsafe extern "C" {
     pub fn fork() -> i32;
     pub fn execve(path: *const u8, argv: *const *const u8) -> i32;
     pub fn wait(pid: i32, status: *mut i32) -> i32;
+    pub fn sleep_ms(ms: u32) -> i32;
 }

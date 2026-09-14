@@ -276,6 +276,8 @@ void isr_handler(struct interrupt_frame *frame)
         serial_print_hex(frame->cs);
         serial_print("\nerr_code: ");
         serial_print_hex(frame->err_code);
+        serial_print("\nRFLAGS: ");
+        serial_print_hex(frame->rflags);
         if (frame->int_no == 14) {
             uint64_t cr2;
             asm volatile("mov %%cr2, %0" : "=r"(cr2));

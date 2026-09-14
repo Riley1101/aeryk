@@ -3,6 +3,11 @@
 
 #include <stdint.h>
 
+// LAPIC timer IRQ0 frequency (init_timer() programs the LAPIC to this),
+// i.e. `ticks` advances by 1 every 1000/TIMER_HZ ms. Shared with syscall.c
+// for converting a userland sleep_ms() argument to a tick count.
+#define TIMER_HZ 100
+
 extern volatile uint64_t ticks;
 
 /**

@@ -16,5 +16,5 @@ impl MousePacket {
 }
 
 unsafe extern "C" {
-    pub fn mouse_read(buf: *mut MousePacket, max_packets: i32) -> i32;
+    pub fn mouse_read(buf: *mut MousePacket, max_packets: i32, nonblock: i32) -> i32;
 }
